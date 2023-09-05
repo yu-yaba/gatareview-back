@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja" prefix="og: https://ogp.me/ns#">
+  <head>
+  <title>ガタレビュ！</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="「ガタレビュ！」は新潟大学の講義レビューサイトです。シラバスではわからないリアルな情報を共有しましょう。"/>
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ガタレビュ！" />
+  <meta property="og:url" content="https://gatareview.com/lectures" />
+  <meta property="og:image" content="https://gatareview.com/ogp.png" />
+  <meta property="og:description" content="「ガタレビュ！」は新潟大学の講義レビューサイトです。シラバスではわからないリアルな情報を共有しましょう。" />
+  <meta property="og:site_name" content="ガタレビュ！" />
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#1DBE67">
+
+  <%= csrf_meta_tags %>
+  <%= csp_meta_tag %>
+
+  <link rel="icon" href="/icon.png">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png"><!-- 180×180 -->
+  
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload", defer: true %>
+
+  
+  </head>
+
+<!-- Google tag (gtag.js) -->
+  <%# <script async src="https://www.googletagmanager.com/gtag/js?id=G-BHTFSNKN5H"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-BHTFSNKN5H');
+  </script> %>
+
+  <body>
+    <%= yield %>
+  </body>
+</html>

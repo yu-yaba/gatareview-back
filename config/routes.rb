@@ -1,6 +1,17 @@
 Rails.application.routes.draw do
-  # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
+  root to: 'api/v2/lectures#index'
 
-  # Defines the root path route ("/")
-  # root "articles#index"
+  namespace :api do
+    namespace :v2 do 
+      resources :lectures do
+        resources :reviews, only: [:index, :create]
+        member do
+          post :images, to: 'lectures#create_image'
+          get :images, to: 'lectures#show_image'
+        end
+      end
+    end
+  end
+
+  get '*path', to: 'site#index', constraints: ->(request){ request.format.html? }
 end
