@@ -3,7 +3,7 @@ class Api::V2::LecturesController < ApplicationController
 
 # GET /lectures
   def index
-    @lectures = Lecture.with_attached_images.includes(:reviews).page(params[:page]).per(params[:limit])
+    @lectures = Lecture.with_attached_images.includes(:reviews)
 
     @lectures_json = @lectures.map do |lecture|
       lecture_attributes = lecture.attributes
