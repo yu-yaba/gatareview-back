@@ -2,7 +2,7 @@ class Api::V2::ReviewsController < ApplicationController
   before_action :set_lecture
     
   def index
-    reviews = lecture.reviews
+    reviews = @lecture.reviews
     render json: reviews
   end
 

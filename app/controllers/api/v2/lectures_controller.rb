@@ -17,13 +17,18 @@ class Api::V2::LecturesController < ApplicationController
 
   # GET /lectures/1
   def show
-    if @lecture.image.attached?
+    if @lecture.nil?
+      render json: { error: 'Lecture not found' }, status: 404
+      return
+    end
+  
+    if @lecture.images.attached?
       render json: @lecture.as_json.merge({ image_url: rails_blob_url(@lecture.image) })
     else
-      render json: { error: 'No image attached' }, status: 404
+      render json: @lecture.as_json
     end
   end
-
+    
   # POST /lectures
   def create
     @lecture = Lecture.new(lecture_params)
