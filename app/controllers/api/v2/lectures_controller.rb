@@ -29,8 +29,19 @@ class Api::V2::LecturesController < ApplicationController
     end
   end
     
-  # POST /lectures
+# POST /lectures
   def create
+    # 部分一致の確認
+    duplicate_lecture = Lecture.where("title LIKE ? AND lecturer LIKE ? AND faculty LIKE ?", 
+                                      "%#{lecture_params[:title]}%", 
+                                      "%#{lecture_params[:lecturer]}%", 
+                                      "%#{lecture_params[:faculty]}%").first
+
+    if duplicate_lecture
+      render json: { error: 'A similar lecture already exists' }, status: :unprocessable_entity
+      return
+    end
+
     @lecture = Lecture.new(lecture_params)
 
     if @lecture.save
