@@ -2,18 +2,27 @@ class Api::V2::LecturesController < ApplicationController
   before_action :set_lecture, only: [:show, :create_image, :show_image]
 
 # GET /lectures
-  def index
-    @lectures = Lecture.with_attached_images.includes(:reviews)
+def index
+  @lectures = Lecture.with_attached_images.includes(:reviews)
 
-    @lectures_json = @lectures.map do |lecture|
-      lecture_attributes = lecture.attributes
-      lecture_attributes[:avg_rating] = lecture.reviews.average(:rating)&.round(1) || 0
-      lecture_attributes[:image_urls] = lecture.images.map { |image| url_for(image) }
-      lecture_attributes
+  @lectures_json = @lectures.map do |lecture|
+    lecture_attributes = lecture.attributes
+    lecture_attributes[:avg_rating] = lecture.reviews.average(:rating) || 0
+    lecture_attributes[:image_urls] = lecture.images.map { |image| url_for(image) }
+    lecture_attributes[:reviews] = lecture.reviews.map do |review|
+      {
+        id: review.id,
+        content: review.content,
+        rating: review.rating,
+        created_at: review.created_at,
+        updated_at: review.updated_at
+      }
     end
-
-    render json: @lectures_json
+    lecture_attributes
   end
+
+  render json: @lectures_json
+end
 
   # GET /lectures/1
   def show
