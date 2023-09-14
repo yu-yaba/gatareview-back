@@ -29,8 +29,7 @@ grading_types = ['テストのみ', 'レポートのみ', 'テスト,レポー�
 content_difficulties = ['とても楽', '楽', '普通', '難しい', 'とても難しい']
 content_qualities = ['とても良い', '良い', '普通', '悪い', 'とても悪い']
 
-# 40個の講義を生成します
-40.times do |i|
+200.times do |i|
   lecture_title = lecture_titles.sample
 
   lecture = Lecture.create!(

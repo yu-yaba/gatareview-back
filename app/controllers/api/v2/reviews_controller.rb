@@ -1,5 +1,5 @@
 class Api::V2::ReviewsController < ApplicationController
-  before_action :set_lecture
+  before_action :set_lecture, except: [:total]
     
   def index
     reviews = @lecture.reviews
@@ -16,6 +16,11 @@ class Api::V2::ReviewsController < ApplicationController
     else
       render json: @review.errors, status: :unprocessable_entity
     end
+  end
+
+  def total
+    total_reviews = Review.count
+    render json: { count: total_reviews }
   end
 
   private

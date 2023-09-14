@@ -1,5 +1,5 @@
 Rails.application.routes.draw do
-  root to: 'api/v2/lectures#index'
+  root to: 'site#index' 
 
   namespace :api do
     namespace :v2 do 
@@ -10,6 +10,7 @@ Rails.application.routes.draw do
           get :images, to: 'lectures#show_image'
         end
       end
+      get '/reviews/total', to: 'reviews#total'
     end
   end
 

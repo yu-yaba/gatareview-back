@@ -3,11 +3,30 @@ class Api::V2::LecturesController < ApplicationController
 
 # GET /lectures
 def index
+  query_conditions = {}
+
+  if params[:faculty].present?
+    query_conditions[:faculty] = params[:faculty]
+  end
+
+  if params[:searchWord].present?
+    query_conditions[:title] = params[:searchWord]
+  end
+
+  if query_conditions.empty?
+    render json: { error: 'Either faculty or searchWord must be specified.' }, status: 400
+    return
+  end
+
   @lectures = Lecture.with_attached_images.includes(:reviews)
+    .where("faculty LIKE :faculty OR title LIKE :searchWord", faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
+
+  lecture_ids = @lectures.pluck(:id)
+  avg_ratings = Review.where(lecture_id: lecture_ids).group(:lecture_id).average(:rating)
 
   @lectures_json = @lectures.map do |lecture|
     lecture_attributes = lecture.attributes
-    lecture_attributes[:avg_rating] = lecture.reviews.average(:rating) || 0
+    lecture_attributes[:avg_rating] = avg_ratings[lecture.id.to_s] || 0
     lecture_attributes[:image_urls] = lecture.images.map { |image| url_for(image) }
     lecture_attributes[:reviews] = lecture.reviews.map do |review|
       {
@@ -23,6 +42,7 @@ def index
 
   render json: @lectures_json
 end
+
 
   # GET /lectures/1
   def show
@@ -40,11 +60,10 @@ end
     
 # POST /lectures
   def create
-    # 部分一致の確認
     duplicate_lecture = Lecture.where("title LIKE ? AND lecturer LIKE ? AND faculty LIKE ?", 
-                                      "%#{lecture_params[:title]}%", 
-                                      "%#{lecture_params[:lecturer]}%", 
-                                      "%#{lecture_params[:faculty]}%").first
+      "%#{lecture_params[:title]}%", 
+      "%#{lecture_params[:lecturer]}%", 
+      "%#{lecture_params[:faculty]}%").first
 
     if duplicate_lecture
       render json: { error: 'A similar lecture already exists' }, status: :unprocessable_entity
