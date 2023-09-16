@@ -36,19 +36,23 @@ gem "bootsnap", require: false
 # Use Rack CORS for handling Cross-Origin Resource Sharing (CORS), making cross-origin AJAX possible
 gem "rack-cors"
 
+gem "kaminari"
+
 gem 'aws-sdk-s3'
 
 gem "faker"
 
+gem "mysql2", "~> 0.5"
+
+
 group :development do
   # Speed up commands on slow machines / big apps [https://github.com/rails/spring]
   # gem "spring"
-  gem 'pg', '~> 1.2', '>= 1.2.3'
   gem "debug", platforms: %i[ mri mingw x64_mingw ]
   
 end
 
 
-group :production do
-  gem 'pg', '~> 1.2', '>= 1.2.3'
-end
+# group :production do
+#   gem 'pg', '~> 1.2', '>= 1.2.3'
+# end
