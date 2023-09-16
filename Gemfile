@@ -41,6 +41,7 @@ gem "kaminari"
 gem 'aws-sdk-s3'
 
 gem "faker"
+gem 'mysql2'
 
 
 group :development, :test do
