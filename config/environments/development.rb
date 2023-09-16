@@ -70,6 +70,6 @@ Rails.application.configure do
   config.active_storage.service = :amazon
 
 Rails.application.routes.default_url_options[:host] = 'localhost:3000'
-config.hosts << "gatareview-back-0323feb9f5f4.herokuapp.com"
+
 
 end
