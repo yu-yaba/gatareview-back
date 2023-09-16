@@ -1,6 +1,6 @@
 build:
   docker:
-    web: Dockerfile.production
+    web: Dockerfile
 release:
   command:
     - mv confing/environments/production.heroku.rb confing/environments/production.rb
