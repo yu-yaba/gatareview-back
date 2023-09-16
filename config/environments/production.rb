@@ -63,7 +63,8 @@ Rails.application.configure do
 
   config.action_mailer.perform_caching = false
 
-  config.hosts.clear
+  config.hosts << "gatareview-back-0323feb9f5f4.herokuapp.com"
+
 
   # Ignore bad email addresses and do not raise email delivery errors.
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.
