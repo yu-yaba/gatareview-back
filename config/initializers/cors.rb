@@ -7,9 +7,8 @@
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    origins "http://localhost:8080"
-
-    resource "*",
+    origins 'localhost:8080', '127.0.0.1:8080', 'https://gatareview-front-9kteub120-yu-yaba.vercel.app'
+    resource '*',
       headers: :any,
       methods: [:get, :post, :put, :patch, :delete, :options, :head]
   end
