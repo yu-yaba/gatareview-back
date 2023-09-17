@@ -50,6 +50,8 @@ test:
 #
 production:
   <<: *default
-  database: app_production
-  username: app
-  password: <%= ENV["APP_DATABASE_PASSWORD"] %>
+  database: <%= ENV['HEROKU_DB_DATABASE_NAME'] %>
+  host: <%= ENV['HEROKU_DB_HOST'] %>
+  username: <%= ENV['HEROKU_DB_USERNAME'] %>
+  password: <%= ENV['HEROKU_DB_PASSWORD'] %>
+  url: <%= ENV['JAWSDB_URL'] %>
