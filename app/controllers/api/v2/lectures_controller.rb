@@ -26,7 +26,8 @@ def index
 
   @lectures_json = @lectures.map do |lecture|
     lecture_attributes = lecture.attributes
-    lecture_attributes[:avg_rating] = avg_ratings[lecture.id.to_s] || 0
+    avg_rating = avg_ratings[lecture.id.to_s] || 0
+    lecture_attributes[:avg_rating] = avg_rating.round(1)
     lecture_attributes[:image_urls] = lecture.images.map { |image| url_for(image) }
     lecture_attributes[:reviews] = lecture.reviews.map do |review|
       {
