@@ -7,7 +7,6 @@ class Api::V2::ReviewsController < ApplicationController
   end
 
 
-  # POST /lectures/:lecture_id/reviews
   def create
     @review = @lecture.reviews.new(review_params)
 
@@ -18,11 +17,13 @@ class Api::V2::ReviewsController < ApplicationController
     end
   end
 
+
   def total
     total_reviews = Review.count
     render json: { count: total_reviews }
   end
 
+  
   private
 
   def set_lecture
