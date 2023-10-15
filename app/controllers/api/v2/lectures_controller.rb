@@ -1,51 +1,50 @@
 class Api::V2::LecturesController < ApplicationController
   before_action :set_lecture, only: [:show, :create_image, :show_image]
 
-# GET /lectures
-def index
-  query_conditions = {}
 
-  if params[:faculty].present?
-    query_conditions[:faculty] = params[:faculty]
-  end
+  def index
+    query_conditions = {}
 
-  if params[:searchWord].present?
-    query_conditions[:title] = params[:searchWord]
-  end
-
-  if query_conditions.empty?
-    render json: { error: 'Either faculty or searchWord must be specified.' }, status: 400
-    return
-  end
-
-  @lectures = Lecture.with_attached_images.includes(:reviews)
-    .where("faculty LIKE :faculty OR title LIKE :searchWord", faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
-
-  lecture_ids = @lectures.pluck(:id)
-  avg_ratings = Review.where(lecture_id: lecture_ids).group(:lecture_id).average(:rating)
-
-  @lectures_json = @lectures.map do |lecture|
-    lecture_attributes = lecture.attributes
-    avg_rating = avg_ratings[lecture.id.to_s] || 0
-    lecture_attributes[:avg_rating] = avg_rating.round(1)
-    lecture_attributes[:image_urls] = lecture.images.map { |image| url_for(image) }
-    lecture_attributes[:reviews] = lecture.reviews.map do |review|
-      {
-        id: review.id,
-        content: review.content,
-        rating: review.rating,
-        created_at: review.created_at,
-        updated_at: review.updated_at
-      }
+    if params[:faculty].present?
+      query_conditions[:faculty] = params[:faculty]
     end
-    lecture_attributes
+
+    if params[:searchWord].present?
+      query_conditions[:title] = params[:searchWord]
+    end
+
+    if query_conditions.empty?
+      render json: { error: 'Either faculty or searchWord must be specified.' }, status: 400
+      return
+    end
+
+    @lectures = Lecture.with_attached_images.includes(:reviews)
+      .where("faculty LIKE :faculty OR title LIKE :searchWord", faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
+
+    lecture_ids = @lectures.pluck(:id)
+    avg_ratings = Review.where(lecture_id: lecture_ids).group(:lecture_id).average(:rating)
+
+    @lectures_json = @lectures.map do |lecture|
+      lecture_attributes = lecture.attributes
+      avg_rating = avg_ratings[lecture.id.to_s] || 0
+      lecture_attributes[:avg_rating] = avg_rating.round(1)
+      lecture_attributes[:image_urls] = lecture.images.map { |image| url_for(image) }
+      lecture_attributes[:reviews] = lecture.reviews.map do |review|
+        {
+          id: review.id,
+          content: review.content,
+          rating: review.rating,
+          created_at: review.created_at,
+          updated_at: review.updated_at
+        }
+      end
+      lecture_attributes
+    end
+
+    render json: @lectures_json
   end
 
-  render json: @lectures_json
-end
 
-
-  # GET /lectures/1
   def show
     if @lecture.nil?
       render json: { error: 'Lecture not found' }, status: 404
@@ -59,7 +58,7 @@ end
     end
   end
     
-# POST /lectures
+
   def create
     duplicate_lecture = Lecture.where("title LIKE ? AND lecturer LIKE ? AND faculty LIKE ?", 
       "%#{lecture_params[:title]}%", 
@@ -80,7 +79,7 @@ end
     end
   end
 
-  # POST /lectures/1/images
+
   def create_image
     if params[:lecture][:image]
       @lecture.images.attach(params[:lecture][:image])
@@ -90,6 +89,7 @@ end
     end
   end
       
+
   def show_image
     if @lecture.images.attached?
       images = @lecture.images.map do |image|
