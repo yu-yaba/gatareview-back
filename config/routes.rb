@@ -2,7 +2,7 @@ Rails.application.routes.draw do
   root to: 'site#index' 
 
   namespace :api do
-    namespace :v2 do 
+    namespace :v1 do 
       resources :lectures do
         resources :reviews, only: [:index, :create]
         member do

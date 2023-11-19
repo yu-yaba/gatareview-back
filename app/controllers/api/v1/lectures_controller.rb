@@ -1,4 +1,4 @@
-class Api::V2::LecturesController < ApplicationController
+class Api::V1::LecturesController < ApplicationController
   before_action :set_lecture, only: [:show, :create_image, :show_image]
 
 
