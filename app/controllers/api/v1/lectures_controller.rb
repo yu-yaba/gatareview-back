@@ -1,7 +1,6 @@
 class Api::V1::LecturesController < ApplicationController
   before_action :set_lecture, only: [:show, :create_image, :show_image]
 
-
   def index
     query_conditions = {}
 
@@ -18,7 +17,7 @@ class Api::V1::LecturesController < ApplicationController
       return
     end
 
-    @lectures = Lecture.with_attached_images.includes(:reviews)
+    @lectures = Lecture.all
       .where("faculty LIKE :faculty OR title LIKE :searchWord", faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
 
     lecture_ids = @lectures.pluck(:id)
@@ -28,16 +27,6 @@ class Api::V1::LecturesController < ApplicationController
       lecture_attributes = lecture.attributes
       avg_rating = avg_ratings[lecture.id.to_s] || 0
       lecture_attributes[:avg_rating] = avg_rating.round(1)
-      lecture_attributes[:image_urls] = lecture.images.map { |image| url_for(image) }
-      lecture_attributes[:reviews] = lecture.reviews.map do |review|
-        {
-          id: review.id,
-          content: review.content,
-          rating: review.rating,
-          created_at: review.created_at,
-          updated_at: review.updated_at
-        }
-      end
       lecture_attributes
     end
 
@@ -46,6 +35,7 @@ class Api::V1::LecturesController < ApplicationController
 
 
   def show
+    @lecture = Lecture.with_attached_images.includes(:reviews).find(params[:id])
     if @lecture.nil?
       render json: { error: 'Lecture not found' }, status: 404
       return
@@ -60,10 +50,11 @@ class Api::V1::LecturesController < ApplicationController
     
 
   def create
-    duplicate_lecture = Lecture.where("title LIKE ? AND lecturer LIKE ? AND faculty LIKE ?", 
-      "%#{lecture_params[:title]}%", 
-      "%#{lecture_params[:lecturer]}%", 
-      "%#{lecture_params[:faculty]}%").first
+    normalized_title = lecture_params[:title].strip.downcase
+    normalized_lecturer = lecture_params[:lecturer].strip.downcase
+    normalized_faculty = lecture_params[:faculty].strip.downcase
+
+    duplicate_lecture = Lecture.find_by(title: normalized_title, lecturer: normalized_lecturer, faculty: normalized_faculty)
 
     if duplicate_lecture
       render json: { error: 'A similar lecture already exists' }, status: :unprocessable_entity
