@@ -18,7 +18,7 @@ class Api::V1::LecturesController < ApplicationController
       return
     end
 
-    @lectures = Lecture.all
+    @lectures = Lecture.includes(:reviews)
       .where("faculty LIKE :faculty OR title LIKE :searchWord", faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
 
     lecture_ids = @lectures.pluck(:id)
