@@ -67,8 +67,8 @@ GEM
       minitest (>= 5.1)
       tzinfo (~> 2.0)
     aws-eventstream (1.2.0)
-    aws-partitions (1.844.0)
-    aws-sdk-core (3.186.0)
+    aws-partitions (1.853.0)
+    aws-sdk-core (3.187.0)
       aws-eventstream (~> 1, >= 1.0.2)
       aws-partitions (~> 1, >= 1.651.0)
       aws-sigv4 (~> 1.5)
@@ -76,7 +76,7 @@ GEM
     aws-sdk-kms (1.72.0)
       aws-sdk-core (~> 3, >= 3.184.0)
       aws-sigv4 (~> 1.1)
-    aws-sdk-s3 (1.136.0)
+    aws-sdk-s3 (1.137.0)
       aws-sdk-core (~> 3, >= 3.181.0)
       aws-sdk-kms (~> 1)
       aws-sigv4 (~> 1.6)
@@ -87,19 +87,19 @@ GEM
     builder (3.2.4)
     concurrent-ruby (1.2.2)
     crass (1.0.6)
-    date (3.3.3)
+    date (3.3.4)
     debug (1.8.0)
       irb (>= 1.5.0)
       reline (>= 0.3.1)
     erubi (1.12.0)
-    faker (3.2.1)
+    faker (3.2.2)
       i18n (>= 1.8.11, < 2)
     globalid (1.2.1)
       activesupport (>= 6.1)
     i18n (1.14.1)
       concurrent-ruby (~> 1.0)
     io-console (0.6.0)
-    irb (1.8.3)
+    irb (1.9.0)
       rdoc
       reline (>= 0.3.8)
     jmespath (1.6.2)
@@ -115,7 +115,7 @@ GEM
       activerecord
       kaminari-core (= 1.2.2)
     kaminari-core (1.2.2)
-    loofah (2.21.4)
+    loofah (2.22.0)
       crass (~> 1.0.2)
       nokogiri (>= 1.12.0)
     mail (2.8.1)
@@ -129,25 +129,25 @@ GEM
     minitest (5.20.0)
     msgpack (1.7.2)
     mysql2 (0.5.5)
-    net-imap (0.4.3)
+    net-imap (0.4.5)
       date
       net-protocol
     net-pop (0.1.2)
       net-protocol
-    net-protocol (0.2.1)
+    net-protocol (0.2.2)
       timeout
     net-smtp (0.4.0)
       net-protocol
-    nio4r (2.5.9)
-    nokogiri (1.15.4-aarch64-linux)
+    nio4r (2.6.0)
+    nokogiri (1.15.5-arm64-darwin)
       racc (~> 1.4)
-    nokogiri (1.15.4-arm64-darwin)
+    nokogiri (1.15.5-x86_64-linux)
       racc (~> 1.4)
     psych (5.1.1.1)
       stringio
     puma (5.6.7)
       nio4r (~> 2.0)
-    racc (1.7.2)
+    racc (1.7.3)
     rack (2.2.8)
     rack-cors (2.0.1)
       rack (>= 2.0.0)
@@ -182,13 +182,13 @@ GEM
       thor (~> 1.0)
       zeitwerk (~> 2.5)
     rake (13.1.0)
-    rdoc (6.5.0)
+    rdoc (6.6.0)
       psych (>= 4.0.0)
-    reline (0.3.9)
+    reline (0.4.0)
       io-console (~> 0.5)
-    stringio (3.0.8)
+    stringio (3.0.9)
     thor (1.3.0)
-    timeout (0.4.0)
+    timeout (0.4.1)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
     websocket-driver (0.7.6)
@@ -197,8 +197,8 @@ GEM
     zeitwerk (2.6.12)
 
 PLATFORMS
-  aarch64-linux
   arm64-darwin-22
+  x86_64-linux
 
 DEPENDENCIES
   aws-sdk-s3
