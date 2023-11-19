@@ -1,6 +1,7 @@
 class Api::V1::LecturesController < ApplicationController
   before_action :set_lecture, only: [:show, :create_image, :show_image]
 
+
   def index
     query_conditions = {}
 
@@ -50,11 +51,10 @@ class Api::V1::LecturesController < ApplicationController
     
 
   def create
-    normalized_title = lecture_params[:title].strip.downcase
-    normalized_lecturer = lecture_params[:lecturer].strip.downcase
-    normalized_faculty = lecture_params[:faculty].strip.downcase
-
-    duplicate_lecture = Lecture.find_by(title: normalized_title, lecturer: normalized_lecturer, faculty: normalized_faculty)
+    duplicate_lecture = Lecture.where("title LIKE ? AND lecturer LIKE ? AND faculty LIKE ?", 
+      "%#{lecture_params[:title]}%", 
+      "%#{lecture_params[:lecturer]}%", 
+      "%#{lecture_params[:faculty]}%").first
 
     if duplicate_lecture
       render json: { error: 'A similar lecture already exists' }, status: :unprocessable_entity
