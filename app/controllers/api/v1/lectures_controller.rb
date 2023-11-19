@@ -28,6 +28,15 @@ class Api::V1::LecturesController < ApplicationController
       lecture_attributes = lecture.attributes
       avg_rating = avg_ratings[lecture.id.to_s] || 0
       lecture_attributes[:avg_rating] = avg_rating.round(1)
+      lecture_attributes[:reviews] = lecture.reviews.map do |review|
+        {
+          id: review.id,
+          content: review.content,
+          rating: review.rating,
+          created_at: review.created_at,
+          updated_at: review.updated_at
+        }
+      end
       lecture_attributes
     end
 
