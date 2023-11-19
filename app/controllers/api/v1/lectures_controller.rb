@@ -1,4 +1,4 @@
-class Api::V2::LecturesController < ApplicationController
+class Api::V1::LecturesController < ApplicationController
   before_action :set_lecture, only: [:show, :create_image, :show_image]
 
 
@@ -18,7 +18,7 @@ class Api::V2::LecturesController < ApplicationController
       return
     end
 
-    @lectures = Lecture.with_attached_images.includes(:reviews)
+    @lectures = Lecture.all
       .where("faculty LIKE :faculty OR title LIKE :searchWord", faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
 
     lecture_ids = @lectures.pluck(:id)
@@ -28,16 +28,6 @@ class Api::V2::LecturesController < ApplicationController
       lecture_attributes = lecture.attributes
       avg_rating = avg_ratings[lecture.id.to_s] || 0
       lecture_attributes[:avg_rating] = avg_rating.round(1)
-      lecture_attributes[:image_urls] = lecture.images.map { |image| url_for(image) }
-      lecture_attributes[:reviews] = lecture.reviews.map do |review|
-        {
-          id: review.id,
-          content: review.content,
-          rating: review.rating,
-          created_at: review.created_at,
-          updated_at: review.updated_at
-        }
-      end
       lecture_attributes
     end
 
@@ -46,6 +36,7 @@ class Api::V2::LecturesController < ApplicationController
 
 
   def show
+    @lecture = Lecture.with_attached_images.includes(:reviews).find(params[:id])
     if @lecture.nil?
       render json: { error: 'Lecture not found' }, status: 404
       return
