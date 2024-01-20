@@ -50,6 +50,7 @@ group :development do
   # gem "spring"
   gem "debug", platforms: %i[ mri mingw x64_mingw ]
   
+  gem "solargraph"
 end
 
 
