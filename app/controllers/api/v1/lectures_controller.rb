@@ -1,17 +1,12 @@
 class Api::V1::LecturesController < ApplicationController
-  before_action :set_lecture, only: [:show, :create_image, :show_image]
-
+  before_action :set_lecture, only: %i[show create_image show_image]
 
   def index
     query_conditions = {}
 
-    if params[:faculty].present?
-      query_conditions[:faculty] = params[:faculty]
-    end
+    query_conditions[:faculty] = params[:faculty] if params[:faculty].present?
 
-    if params[:searchWord].present?
-      query_conditions[:title] = params[:searchWord]
-    end
+    query_conditions[:title] = params[:searchWord] if params[:searchWord].present?
 
     if query_conditions.empty?
       render json: { error: 'Either faculty or searchWord must be specified.' }, status: 400
@@ -19,7 +14,7 @@ class Api::V1::LecturesController < ApplicationController
     end
 
     @lectures = Lecture.includes(:reviews)
-      .where("faculty LIKE :faculty OR title LIKE :searchWord", faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
+                       .where('faculty LIKE :faculty OR title LIKE :searchWord', faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
 
     lecture_ids = @lectures.pluck(:id)
     avg_ratings = Review.where(lecture_id: lecture_ids).group(:lecture_id).average(:rating)
@@ -43,27 +38,25 @@ class Api::V1::LecturesController < ApplicationController
     render json: @lectures_json
   end
 
-
   def show
     @lecture = Lecture.with_attached_images.includes(:reviews).find(params[:id])
     if @lecture.nil?
       render json: { error: 'Lecture not found' }, status: 404
       return
     end
-  
+
     if @lecture.images.attached?
       render json: @lecture.as_json.merge({ image_url: rails_blob_url(@lecture.image) })
     else
       render json: @lecture.as_json
     end
   end
-    
 
   def create
-    duplicate_lecture = Lecture.where("title LIKE ? AND lecturer LIKE ? AND faculty LIKE ?", 
-      "%#{lecture_params[:title]}%", 
-      "%#{lecture_params[:lecturer]}%", 
-      "%#{lecture_params[:faculty]}%").first
+    duplicate_lecture = Lecture.where('title LIKE ? AND lecturer LIKE ? AND faculty LIKE ?',
+                                      "%#{lecture_params[:title]}%",
+                                      "%#{lecture_params[:lecturer]}%",
+                                      "%#{lecture_params[:faculty]}%").first
 
     if duplicate_lecture
       render json: { error: 'A similar lecture already exists' }, status: :unprocessable_entity
@@ -79,7 +72,6 @@ class Api::V1::LecturesController < ApplicationController
     end
   end
 
-
   def create_image
     if params[:lecture][:image]
       @lecture.images.attach(params[:lecture][:image])
@@ -88,7 +80,6 @@ class Api::V1::LecturesController < ApplicationController
       render json: { error: 'No image provided' }, status: :unprocessable_entity
     end
   end
-      
 
   def show_image
     if @lecture.images.attached?
@@ -98,19 +89,19 @@ class Api::V1::LecturesController < ApplicationController
           type: image.blob.content_type
         }
       end
-      render json: { images: images }
+      render json: { images: }
     else
       render json: { error: 'No image attached' }, status: 404
     end
   end
-      
 
-    private
-    def set_lecture
-      @lecture = Lecture.find(params[:id])
-    end
+  private
 
-    def lecture_params
-      params.require(:lecture).permit(:title, :lecturer, :faculty, :image)
-    end
+  def set_lecture
+    @lecture = Lecture.find(params[:id])
+  end
+
+  def lecture_params
+    params.require(:lecture).permit(:title, :lecturer, :faculty, :image)
+  end
 end
