@@ -6,3 +6,6 @@ AllCops:
     - 'vendor/**/*'
     - 'tmp/**/*'
     - 'test/**/*'
+
+Documentation:
+  Enabled: false
