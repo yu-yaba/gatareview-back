@@ -1,6 +1,6 @@
-require_relative "boot"
+require_relative 'boot'
 
-require "rails/all"
+require 'rails/all'
 
 # Require the gems listed in Gemfile, including any gems
 # you've limited to :test, :development, or :production.
@@ -13,8 +13,8 @@ module App
       allow do
         origins 'http://localhost:8080' # フロントエンドのオリジン
         resource '*',
-          headers: :any,
-          methods: [:get, :post]
+                 headers: :any,
+                 methods: %i[get post]
       end
     end
     # Configuration for the application, engines, and railties goes here.

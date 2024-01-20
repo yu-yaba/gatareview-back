@@ -1,10 +1,10 @@
 Rails.application.routes.draw do
-  root to: 'site#index' 
+  root to: 'site#index'
 
   namespace :api do
-    namespace :v1 do 
+    namespace :v1 do
       resources :lectures do
-        resources :reviews, only: [:index, :create]
+        resources :reviews, only: %i[index create]
         member do
           post :images, to: 'lectures#create_image'
           get :images, to: 'lectures#show_image'
@@ -14,5 +14,5 @@ Rails.application.routes.draw do
     end
   end
 
-  get '*path', to: 'site#index', constraints: ->(request){ request.format.html? }
+  get '*path', to: 'site#index', constraints: ->(request) { request.format.html? }
 end

@@ -1,5 +1,5 @@
 # 使用するベースイメージ
-FROM ruby:3.2
+FROM ruby:3.2.2
 
 # 作業ディレクトリを作成
 RUN mkdir /app

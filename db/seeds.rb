@@ -1,11 +1,11 @@
 # フェイカーを使用してランダムデータを生成します
 require 'faker'
 
-Faker::Config.locale = :ja  
+Faker::Config.locale = :ja
 
 # 学部のオプション
 faculties = ['G: 教養科目', 'H: 人文学部', 'K: 教育学部', 'L: 法学部', 'E: 経済科学部',
-          'S: 理学部', 'M: 医学部', 'D: 歯学部', 'T: 工学部', 'A: 農学部', 'X: 創生学部']
+             'S: 理学部', 'M: 医学部', 'D: 歯学部', 'T: 工学部', 'A: 農学部', 'X: 創生学部']
 
 # 講義名のオプション
 lecture_titles = [
@@ -21,15 +21,15 @@ lecture_titles = [
 review_comments = ['授業はわかりやすかった。', '難しい内容だったが、教授の説明が上手い。', '試験が難しかった。', '自習が必要な授業。', '参考書があると理解しやすい。']
 
 # レビューの各属性のオプション
-period_years = ['2023', '2022', '2021', '2020']
+period_years = %w[2023 2022 2021 2020]
 period_terms = ['1ターム', '2ターム', '1, 2ターム', '3ターム', '4ターム', '3, 4ターム']
-textbooks = ['必要', '不要']
-attendances = ['毎回確認', 'たまに確認', 'なし']
+textbooks = %w[必要 不要]
+attendances = %w[毎回確認 たまに確認 なし]
 grading_types = ['テストのみ', 'レポートのみ', 'テスト,レポート', 'その他']
-content_difficulties = ['とても楽', '楽', '普通', '難しい', 'とても難しい']
-content_qualities = ['とても良い', '良い', '普通', '悪い', 'とても悪い']
+content_difficulties = %w[とても楽 楽 普通 難しい とても難しい]
+content_qualities = %w[とても良い 良い 普通 悪い とても悪い]
 
-200.times do |i|
+200.times do |_i|
   lecture_title = lecture_titles.sample
 
   lecture = Lecture.create!(
