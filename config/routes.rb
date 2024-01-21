@@ -5,10 +5,6 @@ Rails.application.routes.draw do
     namespace :v1 do
       resources :lectures do
         resources :reviews, only: %i[index create]
-        member do
-          post :images, to: 'lectures#create_image'
-          get :images, to: 'lectures#show_image'
-        end
       end
       get '/reviews/total', to: 'reviews#total'
     end

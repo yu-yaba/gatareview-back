@@ -3,8 +3,6 @@
 module Api
   module V1
     class LecturesController < ApplicationController
-      before_action :set_lecture, only: %i[show create_image show_image]
-
       def index
         query_conditions = {}
 
@@ -43,17 +41,8 @@ module Api
       end
 
       def show
-        @lecture = Lecture.with_attached_images.includes(:reviews).find(params[:id])
-        if @lecture.nil?
-          render json: { error: 'Lecture not found' }, status: 404
-          return
-        end
-
-        if @lecture.images.attached?
-          render json: @lecture.as_json.merge({ image_url: rails_blob_url(@lecture.image) })
-        else
-          render json: @lecture.as_json
-        end
+        @lecture = Lecture.find(params[:id])
+        render json: @lecture
       end
 
       def create
@@ -76,37 +65,10 @@ module Api
         end
       end
 
-      def create_image
-        if params[:lecture][:image]
-          @lecture.images.attach(params[:lecture][:image])
-          render json: @lecture, status: :created
-        else
-          render json: { error: 'No image provided' }, status: :unprocessable_entity
-        end
-      end
-
-      def show_image
-        if @lecture.images.attached?
-          images = @lecture.images.map do |image|
-            {
-              url: rails_blob_url(image),
-              type: image.blob.content_type
-            }
-          end
-          render json: { images: }
-        else
-          render json: { error: 'No image attached' }, status: 404
-        end
-      end
-
       private
 
-      def set_lecture
-        @lecture = Lecture.find(params[:id])
-      end
-
       def lecture_params
-        params.require(:lecture).permit(:title, :lecturer, :faculty, :image)
+        params.require(:lecture).permit(:title, :lecturer, :faculty)
       end
     end
   end

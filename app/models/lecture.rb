@@ -2,5 +2,10 @@
 
 class Lecture < ApplicationRecord
   has_many :reviews
-  has_many_attached :images
+
+  def self.search(faculty, title)
+    query_conditions = {}
+
+    query_conditions[:faculty] = params[:faculty] if params
+  end
 end
