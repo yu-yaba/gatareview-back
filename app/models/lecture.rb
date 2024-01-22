@@ -2,10 +2,6 @@
 
 class Lecture < ApplicationRecord
   has_many :reviews
-
-  def self.search(faculty, title)
-    query_conditions = {}
-
-    query_conditions[:faculty] = params[:faculty] if params
-  end
+  validates :title, :lecturer, :faculty, presence: true
+  validates :title, uniqueness: { scope: [:lecturer, :faculty] }
 end
