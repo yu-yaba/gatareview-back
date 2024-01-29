@@ -42,7 +42,7 @@ gem 'kaminari'
 
 gem 'faker'
 
-gem 'mysql2', '~> 0.5'
+gem 'mysql2'
 
 group :development do
   # Speed up commands on slow machines / big apps [https://github.com/rails/spring]

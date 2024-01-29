@@ -255,7 +255,7 @@ DEPENDENCIES
   debug
   faker
   kaminari
-  mysql2 (~> 0.5)
+  mysql2
   puma (~> 5.0)
   rack-cors
   rails (~> 7.0.6)
