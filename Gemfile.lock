@@ -147,7 +147,7 @@ GEM
     nokogiri (1.16.0-x86_64-linux)
       racc (~> 1.4)
     parallel (1.24.0)
-    parser (3.3.0.4)
+    parser (3.3.0.5)
       ast (~> 2.4.1)
       racc
     psych (5.1.2)
@@ -199,7 +199,7 @@ GEM
     reverse_markdown (2.1.1)
       nokogiri
     rexml (3.2.6)
-    rubocop (1.60.1)
+    rubocop (1.60.2)
       json (~> 2.3)
       language_server-protocol (>= 3.17.0)
       parallel (~> 1.10)
@@ -255,7 +255,7 @@ DEPENDENCIES
   debug
   faker
   kaminari
-  mysql2
+  mysql2 (~> 0.5)
   puma (~> 5.0)
   rack-cors
   rails (~> 7.0.6)
