@@ -1,5 +1,4 @@
 default: &default
-  adapter: mysql2
   encoding: utf8mb4
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
   username: <%= ENV["MYSQL_USER"] %>
@@ -8,14 +7,17 @@ default: &default
 
 development:
   <<: *default
+  adapter: mysql2
   database: <%= ENV["MYSQL_DATABASE"] %>
   
 test:
   <<: *default
+  adapter: mysql2
   database: app_test
 
 production:
   <<: *default
+  adapter: mysql2
   database: <%= ENV['HEROKU_DB_DATABASE_NAME'] %>
   host: <%= ENV['HEROKU_DB_HOST'] %>
   username: <%= ENV['HEROKU_DB_USERNAME'] %>
