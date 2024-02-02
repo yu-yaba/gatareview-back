@@ -42,8 +42,6 @@ Rails.application.configure do
   config.active_record.verbose_query_logs = true
 
 
-  config.active_storage.service = :amazon
-
 Rails.application.routes.default_url_options[:host] = 'localhost:3000'
 
 config.hosts << "gatareview-back-b726b6ea4bcf.herokuapp.com"
