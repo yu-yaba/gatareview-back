@@ -18,14 +18,14 @@ class Lecture < ApplicationRecord
     end
   end
 
-  def self.average_rating(_lectures)
-    lecture_ids = @lectures.pluck(:id)
+  def self.average_rating(lectures)
+    lecture_ids = lectures.pluck(:id)
     Review.where(lecture_id: lecture_ids).group(:lecture_id).average(:rating)
   end
 
   def self.as_json_reviews(lectures)
     avg_ratings = average_rating(lectures)
-    @lectures.map do |lecture|
+    lectures.map do |lecture|
       lecture_attributes = lecture.attributes
       avg_rating = avg_ratings[lecture.id.to_s] || 0
       lecture_attributes[:avg_rating] = avg_rating.round(1)

@@ -58,16 +58,12 @@
 require 'csv'
 
 CSV.foreach(Rails.root.join('lectureData.csv'), headers: false, encoding: 'UTF-8') do |row|
-  title, lecturer, faculty = row.map(&:strip)
+  title, lecturer, faculty = row
 
-  if title && lecturer && faculty
-    lecture = Lecture.new(title: title, lecturer: lecturer, faculty: faculty)
-    if lecture.save
-      puts "Added lecture: #{lecture.title}"
-    else
-      puts "エラーが発生しました: #{lecture.errors.full_messages.join(", ")}"
-    end
+  lecture = Lecture.new(title: title, lecturer: lecturer, faculty: faculty)
+  if lecture.save
+    puts "Added lecture: #{lecture.title}"
   else
-    puts "無効な行: #{row}"
+    puts "エラーが発生しました: #{lecture.errors.full_messages}"
   end
 end
