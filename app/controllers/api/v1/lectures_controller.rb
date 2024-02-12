@@ -4,8 +4,8 @@ module Api
   module V1
     class LecturesController < ApplicationController
       def index
-        @lectures = Lecture.search(params[:faculty], params[:searchWord])
-
+        @lectures = Lecture.preload(:reviews)
+    
         render json: { error: 'Either faculty or searchWord must be specified.' }, status: 400 if @lectures.empty?
 
         @lectures_json = Lecture.as_json_reviews(@lectures)

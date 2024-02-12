@@ -5,19 +5,6 @@ class Lecture < ApplicationRecord
   validates :title, :lecturer, :faculty, presence: true
   validates :title, uniqueness: { scope: %i[lecturer faculty] }
 
-  def self.search(faculty, title)
-    query_conditions = {}
-    query_conditions[:faculty] = faculty if faculty.present?
-    query_conditions[:title] = title if title.present?
-
-    if query_conditions.empty?
-      Lecture.none
-    else
-      @lectures = Lecture.includes(:reviews)
-                         .where('faculty LIKE :faculty OR title LIKE :searchWord', faculty: "%#{query_conditions[:faculty]}%", searchWord: "%#{query_conditions[:title]}%")
-    end
-  end
-
   def self.average_rating(lectures)
     lecture_ids = lectures.pluck(:id)
     Review.where(lecture_id: lecture_ids).group(:lecture_id).average(:rating)
