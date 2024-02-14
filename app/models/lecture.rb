@@ -7,6 +7,7 @@ class Lecture < ApplicationRecord
 
   def self.average_rating(lectures)
     lecture_ids = lectures.pluck(:id)
+
     Review.where(lecture_id: lecture_ids).group(:lecture_id).average(:rating)
   end
 
@@ -18,11 +19,7 @@ class Lecture < ApplicationRecord
       lecture_attributes[:avg_rating] = avg_rating.round(1)
       lecture_attributes[:reviews] = lecture.reviews.map do |review|
         {
-          id: review.id,
-          content: review.content,
-          rating: review.rating,
           created_at: review.created_at,
-          updated_at: review.updated_at
         }
       end
       lecture_attributes
