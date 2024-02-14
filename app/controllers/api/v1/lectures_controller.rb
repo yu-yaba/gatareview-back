@@ -4,9 +4,9 @@ module Api
   module V1
     class LecturesController < ApplicationController
       def index
-        @lectures = Lecture.preload(:reviews)
+        @lectures = Lecture.eager_load(:reviews).all
     
-        render json: { error: 'Either faculty or searchWord must be specified.' }, status: 400 if @lectures.empty?
+        render json: { error: "授業が見つかりません。" }, status: 400 if @lectures.empty?
 
         @lectures_json = Lecture.as_json_reviews(@lectures)
 
