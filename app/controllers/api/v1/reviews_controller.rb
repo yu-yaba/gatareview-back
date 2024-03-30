@@ -3,7 +3,7 @@
 module Api
   module V1
     class ReviewsController < ApplicationController
-      before_action :set_lecture, except: [:total, :latest]
+      before_action :set_lecture, except: [:total]
 
       def index
         reviews = @lecture.reviews
@@ -24,16 +24,6 @@ module Api
         total_reviews = Review.count
         render json: { count: total_reviews }
       end
-
-      def latest
-        @reviews = Review.includes(:lecture).order(created_at: :desc).limit(3)
-        puts @reviews
-        if @reviews.any?
-          render json: @reviews.as_json(include: { lecture: { only: [:id, :title, :lecturer] }}, only: [:id, :rating, :content, :created_at])
-        else
-          render json: { error: "レビューが見つかりません。" }, status: :not_found
-        end
-      end      
 
       private
 

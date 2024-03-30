@@ -7,7 +7,6 @@ Rails.application.routes.draw do
         resources :reviews, only: %i[index create]
       end
       get '/reviews/total', to: 'reviews#total'
-      get '/reviews/latest', to: 'reviews#latest'
     end
   end
 
