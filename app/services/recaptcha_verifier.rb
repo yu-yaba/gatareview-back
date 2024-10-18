@@ -1,4 +1,5 @@
-# app/services/recaptcha_verifier.rb
+# frozen_string_literal: true
+
 require 'httparty'
 
 class RecaptchaVerifier

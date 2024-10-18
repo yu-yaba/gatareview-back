@@ -43,9 +43,9 @@ module Api
       def create_review(attributes)
         @review = @lecture.reviews.new(attributes)
         if @review.save
-          render json: @review, status: :created
+          render json: { success: true, review: @review }, status: :created
         else
-          render json: @review.errors, status: :unprocessable_entity
+          render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
         end
       end
     end
