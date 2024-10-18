@@ -5,19 +5,23 @@ module Api
     class ReviewsController < ApplicationController
       before_action :set_lecture, except: [:total, :latest]
 
+      def create
+        token = params[:token]
+        review_attributes = review_params
+
+        verifier = RecaptchaVerifier.new(token, 'submit', 0.5)
+
+        if verifier.verify
+          # reCAPTCHAスコアが閾値以上の場合、レビューを即時に保存
+          create_review(review_attributes)
+        else
+          render json: { success: false, message: 'reCAPTCHA認証に失敗しました。' }, status: :unprocessable_entity
+        end
+      end
+
       def index
         reviews = @lecture.reviews
         render json: reviews
-      end
-
-      def create
-        @review = @lecture.reviews.new(review_params)
-
-        if @review.save
-          render json: @review, status: :created
-        else
-          render json: @review.errors, status: :unprocessable_entity
-        end
       end
 
       def total
@@ -44,6 +48,15 @@ module Api
       def review_params
         params.require(:review).permit(:rating, :content, :period_year, :period_term, :textbook, :attendance,
                                        :grading_type, :content_difficulty, :content_quality)
+      end
+
+      def create_review(attributes)
+        @review = @lecture.reviews.new(attributes)
+        if @review.save
+          render json: { success: true, review: @review }, status: :created
+        else
+          render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
+        end
       end
     end
   end
