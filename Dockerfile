@@ -23,5 +23,9 @@ RUN gem install bundler && \
 # その他のプロジェクトファイルをコピー
 COPY . /app
 
+COPY entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["entrypoint.sh"]
+
 # コマンドの実行
 CMD ["rails", "server", "-b", "0.0.0.0", "-p", "3000"]
