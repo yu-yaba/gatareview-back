@@ -45,7 +45,7 @@ gem 'rack-cors'
 
 gem 'kaminari'
 
-gem 'faker'
+gem 'pry-rails'
 
 gem 'mysql2', '~> 0.5'
 
@@ -54,7 +54,21 @@ group :development do
   # gem "spring"
   gem 'debug', platforms: %i[mri mingw x64_mingw]
 
+  gem 'rspec-rails'
+
+  gem 'factory_bot_rails'
+
+  gem 'faker'
+
   gem 'solargraph'
+end
+
+group :test do
+  gem 'rspec-rails'
+
+  gem 'factory_bot_rails'
+
+  gem 'faker'
 end
 
 # group :production do
