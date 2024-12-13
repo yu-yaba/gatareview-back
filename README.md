@@ -1,4 +1,4 @@
-<img src="https://github.com/yu-yaba/gatareview-front/assets/109569162/8702c61e-ef49-4922-8261-e97048ecb208">
+![image](https://github.com/user-attachments/assets/34fa88d4-c592-40ac-9a6f-87c181e34bde)<img src="https://github.com/yu-yaba/gatareview-front/assets/109569162/8702c61e-ef49-4922-8261-e97048ecb208">
 
 ![Static Badge](https://img.shields.io/badge/https%3A%2F%2Fgithub.com%2Fyu-yaba%2Fgatareview-front)
 <img src="https://img.shields.io/badge/Ruby-CC342D?style=for-the-badge&logo=ruby&style=flat">
@@ -135,7 +135,8 @@ docker-compose up --build
 ```
 
 ## DBのER図
-![image](https://github.com/user-attachments/assets/d32eb330-cf09-45e4-8a7d-cab91db5138b)
+![image](https://github.com/user-attachments/assets/c3adcf4f-ba11-4a1e-a747-ce269bdc689e)
+
 
 # 開発以外の活動
 * X（旧Twitter）でのSNS運用
