@@ -5,14 +5,17 @@ module Api
     class LecturesController < ApplicationController
       def index
         @lectures = Lecture.eager_load(:reviews).all
-    
-        render json: { error: "授業が見つかりません。" }, status: 400 if @lectures.empty?
-
+      
+        if @lectures.empty?
+          render json: { error: "授業が見つかりません。" }, status: :bad_request
+          return
+        end
+      
         @lectures_json = Lecture.as_json_reviews(@lectures)
-
+      
         render json: @lectures_json
       end
-
+      
       def show
         @lecture = Lecture.find(params[:id])
         render json: @lecture
