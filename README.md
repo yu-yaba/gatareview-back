@@ -134,6 +134,9 @@ NEXT_PUBLIC_ENV=http://localhost:3001
 docker-compose up --build
 ```
 
+## DBのER図
+![image](https://github.com/user-attachments/assets/d32eb330-cf09-45e4-8a7d-cab91db5138b)
+
 # 開発以外の活動
 * X（旧Twitter）でのSNS運用
 * 大学でのビラ配り
