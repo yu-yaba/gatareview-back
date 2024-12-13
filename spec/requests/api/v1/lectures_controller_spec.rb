@@ -55,4 +55,42 @@ RSpec.describe Api::V1::LecturesController, type: :request do
       end
     end
   end
+
+  describe 'POST /api/v1/lectures' do
+    let(:valid_params) do
+      {
+        lecture: {
+          title: '新しい講義',
+          lecturer: '新しい講師',
+          faculty: '新しい学部'
+        }
+      }
+    end
+
+    context '有効なパラメータの場合' do
+      it '講義を作成できること' do
+        expect {
+          post '/api/v1/lectures', params: valid_params
+        }.to change(Lecture, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+        json = JSON.parse(response.body)
+        expect(json['title']).to eq('新しい講義')
+        expect(json['lecturer']).to eq('新しい講師')
+        expect(json['faculty']).to eq('新しい学部')
+      end
+    end
+
+    context '無効なパラメータの場合' do
+      it '講義を作成できないこと' do
+        invalid_params = { lecture: { title: '' } }
+        
+        expect {
+          post '/api/v1/lectures', params: invalid_params
+        }.not_to change(Lecture, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+  end
 end 
