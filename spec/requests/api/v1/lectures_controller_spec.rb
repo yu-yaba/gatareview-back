@@ -31,4 +31,28 @@ RSpec.describe Api::V1::LecturesController, type: :request do
       end
     end
   end
+
+  describe 'GET /api/v1/lectures/:id' do
+    let!(:lecture) { FactoryBot.create(:lecture) }
+
+    context '指定したIDの講義が存在する場合' do
+      it '講義の詳細を取得できること' do
+        get "/api/v1/lectures/#{lecture.id}"
+        
+        expect(response).to have_http_status(:success)
+        json = JSON.parse(response.body)
+        expect(json['title']).to eq(lecture.title)
+        expect(json['lecturer']).to eq(lecture.lecturer)
+        expect(json['faculty']).to eq(lecture.faculty)
+      end
+    end
+
+    context '指定したIDの講義が存在しない場合' do
+      it 'エラーを返すこと' do
+        get '/api/v1/lectures/0'
+        
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+  end
 end 
