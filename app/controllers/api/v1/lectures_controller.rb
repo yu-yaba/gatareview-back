@@ -17,10 +17,15 @@ module Api
       end
       
       def show
-        @lecture = Lecture.find(params[:id])
-        render json: @lecture
+        @lecture = Lecture.find_by(id: params[:id])
+      
+        if @lecture
+          render json: @lecture
+        else
+          render json: { error: "指定された講義は存在しません。" }, status: :not_found
+        end
       end
-
+      
       def create
         @lecture = Lecture.new(lecture_params)
 
