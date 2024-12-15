@@ -13,12 +13,7 @@ jobs:
           - "3306:3306"
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
-        options: >-
-          --health-cmd "mysqladmin ping --silent"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
+          
     env:
       RAILS_ENV: test
 
@@ -37,17 +32,6 @@ jobs:
 
       - name: Copy database configuration
         run: cp config/database.yml.ci config/database.yml
-
-      - name: Wait for MySQL
-        run: |
-          for i in {1..10}; do
-            if mysqladmin ping --host=127.0.0.1 --user="root" --silent; then
-              echo "MySQL is up!"
-              break
-            fi
-            echo "Waiting for MySQL..."
-            sleep 5
-          done
 
       - name: Set up database
         run: |
