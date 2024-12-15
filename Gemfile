@@ -19,7 +19,7 @@ gem 'puma', '~> 5.0'
 
 gem 'httparty'
 
-gem 'dotenv-rails', groups: [:development, :test]
+gem 'dotenv-rails', groups: %i[development test]
 
 gem 'recaptcha', require: 'recaptcha/rails'
 # Use Redis adapter to run Action Cable in production
@@ -47,7 +47,7 @@ gem 'kaminari'
 
 gem 'pry-rails'
 
-gem 'mysql2', '~> 0.5'
+gem 'mysql2', '~> 0.5.6'
 
 group :development do
   # Speed up commands on slow machines / big apps [https://github.com/rails/spring]
