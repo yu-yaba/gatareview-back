@@ -6,7 +6,7 @@
 # run tests and linters.
 name: "gatareview-back CI"
 on:
-  workflow_dispatch:
+  push:
 jobs:
   test:
     runs-on: ubuntu-latest
