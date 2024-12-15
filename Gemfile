@@ -47,7 +47,7 @@ gem 'kaminari'
 
 gem 'pry-rails'
 
-gem 'mysql2', '~> 0.5'
+gem 'mysql2', '~> 0.5.6'
 
 group :development do
   # Speed up commands on slow machines / big apps [https://github.com/rails/spring]
