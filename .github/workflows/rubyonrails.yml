@@ -22,7 +22,7 @@ jobs:
           MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
     env:
       RAILS_ENV: test
-      DATABASE_URL: mysql2://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@mysql:3306/${{ secrets.MYSQL_DATABASE }}
+      DATABASE_URL: mysql2://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@127.0.0.1:3306/${{ secrets.MYSQL_DATABASE }}
 
     steps:
       - name: Checkout code
@@ -36,6 +36,17 @@ jobs:
 
       - name: Install dependencies
         run: bundle install --jobs 4 --retry 3
+
+      - name: Wait for MySQL
+        run: |
+          for i in {1..10}; do
+            if mysqladmin ping --host=127.0.0.1 --user="${{ secrets.MYSQL_USER }}" --password="${{ secrets.MYSQL_PASSWORD }}" --silent; then
+              echo "MySQL is up!"
+              break
+            fi
+            echo "Waiting for MySQL..."
+            sleep 5
+          done
 
       - name: Set up database
         run: |
