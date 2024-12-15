@@ -19,7 +19,7 @@ gem 'puma', '~> 5.0'
 
 gem 'httparty'
 
-gem 'dotenv-rails', groups: [:development, :test]
+gem 'dotenv-rails', groups: %i[development test]
 
 gem 'recaptcha', require: 'recaptcha/rails'
 # Use Redis adapter to run Action Cable in production
