@@ -23,7 +23,7 @@ class Lecture < ApplicationRecord
       lecture_attributes[:avg_rating] = avg_rating.round(1)
       lecture_attributes[:reviews] = lecture.reviews.map do |review|
         {
-          created_at: review.created_at,
+          created_at: review.created_at
         }
       end
       lecture_attributes
