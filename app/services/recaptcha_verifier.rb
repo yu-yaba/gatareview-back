@@ -17,7 +17,7 @@ class RecaptchaVerifier
 
   def verify
     response = HTTParty.post(
-      "https://www.google.com/recaptcha/api/siteverify",
+      'https://www.google.com/recaptcha/api/siteverify',
       body: {
         secret: RECAPTCHA_SECRET_KEY,
         response: @token
