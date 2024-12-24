@@ -49,26 +49,21 @@ gem 'pry-rails'
 
 gem 'mysql2', '~> 0.5.6'
 
+gem 'rspec-rails'
+
+gem 'factory_bot_rails'
+
+gem 'faker'
+
 group :development do
   # Speed up commands on slow machines / big apps [https://github.com/rails/spring]
   # gem "spring"
   gem 'debug', platforms: %i[mri mingw x64_mingw]
 
-  gem 'rspec-rails'
-
-  gem 'factory_bot_rails'
-
-  gem 'faker'
-
   gem 'solargraph'
 end
 
 group :test do
-  gem 'rspec-rails'
-
-  gem 'factory_bot_rails'
-
-  gem 'faker'
 end
 
 # group :production do
