@@ -117,7 +117,7 @@ services:
 MYSQL_ROOT_PASSWORD=your_password
 MYSQL_DATABASE=your_database
 MYSQL_PASSWORD=your_password
-MYSQL_USER=your_user
+MYSQL_USER=root
 MYSQL_HOST=db
 ```
 
@@ -130,13 +130,20 @@ NEXT_PUBLIC_ENV=http://localhost:3001
 ```
 
 ### コンテナを起動
-初回起動時のみnode_modulesがないので以下を実行
+
+* 初回起動時のみnode_modulesがないので以下を実行
 ```
-docker-compose run --rm front npm install
+docker-compose run --rm gatareview-front npm install
 ```
 
+* コンテナをビルド
 ```
 docker-compose up --build
+```
+
+* gatareview-backコンテナ内で、railsのマイグレーションを実行
+```
+docker-compose run --rm gatareview-back bin/rails db:migrate RAILS_ENV=development
 ```
 
 ## DBのER図
