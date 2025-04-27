@@ -54,6 +54,8 @@ GEM
     activerecord (7.0.8.6)
       activemodel (= 7.0.8.6)
       activesupport (= 7.0.8.6)
+    activerecord-import (2.1.0)
+      activerecord (>= 4.2)
     activestorage (7.0.8.6)
       actionpack (= 7.0.8.6)
       activejob (= 7.0.8.6)
@@ -294,6 +296,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  activerecord-import
   bootsnap
   debug
   dotenv-rails
