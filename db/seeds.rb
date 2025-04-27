@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # # フェイカーを使用してランダムデータを生成します
 # require 'faker'
 
@@ -55,15 +57,52 @@
 #   end
 # end
 
+
 require 'csv'
+require 'activerecord-import'
 
-CSV.foreach(Rails.root.join('lectureData.csv'), headers: false, encoding: 'UTF-8') do |row|
-  title, lecturer, faculty = row
+csv_file_path = Rails.root.join('lectureData_2025.csv')
 
-  lecture = Lecture.new(title: title, lecturer: lecturer, faculty: faculty)
-  if lecture.save
-    puts "Added lecture: #{lecture.title}"
-  else
-    puts "エラーが発生しました: #{lecture.errors.full_messages}"
-  end
+puts "Seeding lectures from #{File.basename(csv_file_path)}..."
+puts "重複する講義は無視され、既存データは削除されません。"
+
+unless File.exist?(csv_file_path)
+  puts "エラー: CSVファイルが見つかりません: #{csv_file_path}"
+  exit 1
 end
+
+lectures_to_import = []
+skipped_rows_count = 0
+total_rows_processed = 0
+
+CSV.foreach(csv_file_path, headers: false, encoding: 'UTF-8') do |row|
+  total_rows_processed += 1
+  title = row[0]&.strip
+  lecturer = row[1]&.strip
+  faculty = row[2]&.strip
+
+  # 必須項目が一つでも空ならスキップし、情報を表示
+  if title.blank? || lecturer.blank? || faculty.blank?
+    puts "[行 #{total_rows_processed}] スキップ: 必須項目 (title, lecturer, faculty) のいずれかが空です。 データ: [#{row.join(', ')}]"
+    skipped_rows_count += 1
+    next
+  end
+
+  # 有効なデータを Lecture オブジェクトとして配列に追加
+  lectures_to_import << Lecture.new(title: title, lecturer: lecturer, faculty: faculty)
+end
+puts "--- CSVデータ読み込み完了 ---"
+puts "#{total_rows_processed} 行を処理しました。"
+puts "#{skipped_rows_count} 行が必須項目不足のためスキップされました。"
+puts "------------------------------------"
+
+if lectures_to_import.any?
+  puts "#{lectures_to_import.size} 件の有効なデータをインポートします..."
+  Lecture.import lectures_to_import, validate: false, ignore: true
+  puts "インポート処理を実行しました。"
+  puts "(データベースに存在しない新しいレコードのみが追加されました)"
+else
+  puts "CSVファイルにインポート対象の有効なデータが見つかりませんでした。"
+end
+
+puts 'Seed処理が完了しました。'
