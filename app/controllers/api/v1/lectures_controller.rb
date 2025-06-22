@@ -7,16 +7,26 @@ module Api
         page = params[:page]&.to_i || 1
         per_page = 20
         
-        # ベースクエリを構築
-        @lectures = Lecture.eager_load(:reviews)
+        # 検索パラメータがない場合は空の結果を返す
+        unless params[:search].present? || params[:faculty].present? || review_search_params_present?
+          render json: { 
+            lectures: [], 
+            pagination: {
+              current_page: page,
+              total_pages: 0,
+              total_count: 0,
+              per_page: per_page
+            }
+          }
+          return
+        end
+        
+        # 効率的なクエリ構築（eager_loadは必要な場合のみ）
+        @lectures = Lecture.all
         
         # 基本検索（キーワード、学部）
         if params[:search].present?
-          search_term = "%#{params[:search]}%"
-          @lectures = @lectures.where(
-            "title LIKE ? OR lecturer LIKE ?", 
-            search_term, search_term
-          )
+          @lectures = @lectures.search_by_title_and_lecturer(params[:search])
         end
         
         if params[:faculty].present?
@@ -29,25 +39,28 @@ module Api
           @lectures = @lectures.where(id: lecture_ids) if lecture_ids.any?
         end
         
-        # 総件数を取得（ソート前）
-        total_count = @lectures.distinct.count('lectures.id')
+        # 総件数を効率的に取得
+        total_count = @lectures.count
         
-        # ソート処理とページネーション
-        @lectures = apply_sorting_and_pagination(@lectures, page, per_page)
+        # ページネーション（limit/offsetを使用）
+        offset = (page - 1) * per_page
+        @lectures = @lectures.limit(per_page).offset(offset)
 
-        if @lectures.empty? && page == 1
+        # 結果が空の場合
+        if @lectures.empty?
           render json: { 
             lectures: [], 
             pagination: {
               current_page: page,
-              total_pages: 0,
-              total_count: 0,
+              total_pages: (total_count.to_f / per_page).ceil,
+              total_count: total_count,
               per_page: per_page
             }
           }
           return
         end
 
+        # JSON化（N+1問題を回避）
         @lectures_json = Lecture.as_json_reviews(@lectures)
         
         total_pages = (total_count.to_f / per_page).ceil
@@ -108,49 +121,6 @@ module Api
         review_query = review_query.where(content_quality: params[:content_quality]) if params[:content_quality].present?
         
         review_query.distinct.pluck(:lecture_id)
-      end
-      
-      def get_sorted_lecture_ids(lectures_query)
-        case params[:sort]
-        when 'newest'
-          # 最新のレビューがある授業順（レビューのない授業は最後）
-          lectures_query.left_joins(:reviews)
-                       .group('lectures.id')
-                       .order(Arel.sql('MAX(reviews.created_at) DESC'), 'lectures.created_at DESC')
-                       .pluck('lectures.id')
-        when 'highestRating'
-          # 評価が高い順（レビューのない授業は最後）
-          lectures_query.left_joins(:reviews)
-                       .group('lectures.id')
-                       .order(Arel.sql('AVG(reviews.rating) DESC'), 'lectures.created_at DESC')
-                       .pluck('lectures.id')
-        when 'mostReviewed'
-          # レビュー件数順（レビューのない授業は最後）
-          lectures_query.left_joins(:reviews)
-                       .group('lectures.id')
-                       .order(Arel.sql('COUNT(reviews.id) DESC'), 'lectures.created_at DESC')
-                       .pluck('lectures.id')
-        else
-          # デフォルトは作成日順
-          lectures_query.order(created_at: :desc).pluck('lectures.id')
-        end
-      end
-
-      def apply_sorting_and_pagination(lectures_query, page, per_page)
-        # ソート処理とページネーション
-        sorted_lecture_ids = get_sorted_lecture_ids(lectures_query)
-        
-        # ページネーション
-        offset = (page - 1) * per_page
-        paginated_ids = sorted_lecture_ids.slice(offset, per_page) || []
-
-        return [] if paginated_ids.empty?
-
-        # ソートされたIDに基づいて実際のレコードを取得
-        lectures = Lecture.eager_load(:reviews).where(id: paginated_ids)
-        
-        # IDの順序を保持してソート
-        lectures.sort_by { |lecture| paginated_ids.index(lecture.id) }
       end
     end
   end
