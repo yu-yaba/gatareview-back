@@ -21,7 +21,7 @@ module Api
           return
         end
         
-        # 効率的なクエリ構築（eager_loadは必要な場合のみ）
+        # 効率的なクエリ構築（検索条件を先に絞り込み）
         @lectures = Lecture.all
         
         # 基本検索（キーワード、学部）
@@ -33,11 +33,13 @@ module Api
           @lectures = @lectures.where(faculty: params[:faculty])
         end
         
-        # レビュー詳細項目による検索
+        # レビュー詳細項目による検索（JOINを使って効率化）
         if review_search_params_present?
-          lecture_ids = filter_by_review_details
-          @lectures = @lectures.where(id: lecture_ids) if lecture_ids.any?
+          @lectures = filter_lectures_by_review_details(@lectures)
         end
+        
+        # 決定的なソート（IDでソート）を追加
+        @lectures = @lectures.order(:id)
         
         # 総件数を効率的に取得
         total_count = @lectures.count
@@ -109,18 +111,52 @@ module Api
         params[:content_quality].present?
       end
       
-      def filter_by_review_details
-        review_query = Review.all
+      def filter_lectures_by_review_details(lectures)
+        # JOINを使ってより効率的に
+        conditions = []
+        params_values = []
         
-        review_query = review_query.where(period_year: params[:period_year]) if params[:period_year].present?
-        review_query = review_query.where(period_term: params[:period_term]) if params[:period_term].present?
-        review_query = review_query.where(textbook: params[:textbook]) if params[:textbook].present?
-        review_query = review_query.where(attendance: params[:attendance]) if params[:attendance].present?
-        review_query = review_query.where(grading_type: params[:grading_type]) if params[:grading_type].present?
-        review_query = review_query.where(content_difficulty: params[:content_difficulty]) if params[:content_difficulty].present?
-        review_query = review_query.where(content_quality: params[:content_quality]) if params[:content_quality].present?
+        if params[:period_year].present?
+          conditions << "reviews.period_year = ?"
+          params_values << params[:period_year]
+        end
         
-        review_query.distinct.pluck(:lecture_id)
+        if params[:period_term].present?
+          conditions << "reviews.period_term = ?"
+          params_values << params[:period_term]
+        end
+        
+        if params[:textbook].present?
+          conditions << "reviews.textbook = ?"
+          params_values << params[:textbook]
+        end
+        
+        if params[:attendance].present?
+          conditions << "reviews.attendance = ?"
+          params_values << params[:attendance]
+        end
+        
+        if params[:grading_type].present?
+          conditions << "reviews.grading_type = ?"
+          params_values << params[:grading_type]
+        end
+        
+        if params[:content_difficulty].present?
+          conditions << "reviews.content_difficulty = ?"
+          params_values << params[:content_difficulty]
+        end
+        
+        if params[:content_quality].present?
+          conditions << "reviews.content_quality = ?"
+          params_values << params[:content_quality]
+        end
+        
+        return lectures if conditions.empty?
+        
+        # JOINクエリで効率的に検索
+        lectures.joins(:reviews)
+               .where(conditions.join(" AND "), *params_values)
+               .distinct
       end
     end
   end
