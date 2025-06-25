@@ -10,14 +10,17 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2025_04_27_071449) do
+ActiveRecord::Schema[7.0].define(version: 2025_06_22_122041) do
   create_table "lectures", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.string "title"
     t.string "lecturer"
     t.string "faculty"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["lecturer"], name: "index_lectures_on_lecturer"
     t.index ["title", "lecturer", "faculty"], name: "index_lectures_on_title_lecturer_faculty", unique: true
+    t.index ["title", "lecturer"], name: "index_lectures_on_title_and_lecturer"
+    t.index ["title"], name: "index_lectures_on_title"
   end
 
   create_table "reviews", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -33,6 +36,7 @@ ActiveRecord::Schema[7.0].define(version: 2025_04_27_071449) do
     t.string "period_term"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["lecture_id"], name: "index_reviews_on_lecture_id"
   end
 
 end

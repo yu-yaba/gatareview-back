@@ -55,7 +55,7 @@ gem 'factory_bot_rails'
 
 gem 'faker'
 
-gem 'activerecord-import' 
+gem 'activerecord-import'
 
 group :development do
   # Speed up commands on slow machines / big apps [https://github.com/rails/spring]

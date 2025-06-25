@@ -6,50 +6,59 @@ module Api
       def index
         page = params[:page]&.to_i || 1
         per_page = 20
-        
-        # ベースクエリを構築
-        @lectures = Lecture.eager_load(:reviews)
-        
-        # 基本検索（キーワード、学部）
-        if params[:search].present?
-          search_term = "%#{params[:search]}%"
-          @lectures = @lectures.where(
-            "title LIKE ? OR lecturer LIKE ?", 
-            search_term, search_term
-          )
-        end
-        
-        if params[:faculty].present?
-          @lectures = @lectures.where(faculty: params[:faculty])
-        end
-        
-        # レビュー詳細項目による検索
-        if review_search_params_present?
-          lecture_ids = filter_by_review_details
-          @lectures = @lectures.where(id: lecture_ids) if lecture_ids.any?
-        end
-        
-        # 総件数を取得（ソート前）
-        total_count = @lectures.distinct.count('lectures.id')
-        
-        # ソート処理とページネーション
-        @lectures = apply_sorting_and_pagination(@lectures, page, per_page)
 
-        if @lectures.empty? && page == 1
-          render json: { 
-            lectures: [], 
+        # 効率的なクエリ構築
+        @lectures = Lecture.all
+
+        # 検索条件が何もない場合は人気の授業を表示（レビュー数順）
+        no_search_params = !params[:search].present? && !params[:faculty].present? && !review_search_params_present?
+        if no_search_params
+          # レビューがある授業のみを表示し、レビュー数順でソート
+          @lectures = @lectures.joins(:reviews)
+                               .group('lectures.id')
+                               .order('COUNT(reviews.id) DESC')
+        end
+
+        # 基本検索（キーワード、学部）
+        @lectures = @lectures.search_by_title_and_lecturer(params[:search]) if params[:search].present?
+
+        @lectures = @lectures.where(faculty: params[:faculty]) if params[:faculty].present?
+
+        # レビュー詳細項目による検索（JOINを使って効率化）
+        @lectures = filter_lectures_by_review_details(@lectures) if review_search_params_present?
+
+        # 決定的なソート（IDでソート）を追加
+        @lectures = @lectures.order(:id)
+
+        # 総件数を効率的に取得（GROUP BYの場合はcountがハッシュになるため対応）
+        total_count = if no_search_params
+                        # GROUP BYを使用している場合、countの結果は異なる
+                        @lectures.unscoped.joins(:reviews).group('lectures.id').count.size
+                      else
+                        @lectures.count
+                      end
+
+        # ページネーション（limit/offsetを使用）
+        offset = (page - 1) * per_page
+        @lectures = @lectures.limit(per_page).offset(offset)
+
+        # 結果が空の場合
+        if @lectures.empty?
+          render json: {
+            lectures: [],
             pagination: {
               current_page: page,
-              total_pages: 0,
-              total_count: 0,
+              total_pages: (total_count.to_f / per_page).ceil,
+              total_count: total_count,
               per_page: per_page
             }
           }
           return
         end
 
+        # JSON化（N+1問題を回避）
         @lectures_json = Lecture.as_json_reviews(@lectures)
-        
+
         total_pages = (total_count.to_f / per_page).ceil
 
         render json: {
@@ -88,69 +97,60 @@ module Api
       def lecture_params
         params.require(:lecture).permit(:title, :lecturer, :faculty)
       end
-      
+
       def review_search_params_present?
         params[:period_year].present? || params[:period_term].present? ||
-        params[:textbook].present? || params[:attendance].present? ||
-        params[:grading_type].present? || params[:content_difficulty].present? ||
-        params[:content_quality].present?
+          params[:textbook].present? || params[:attendance].present? ||
+          params[:grading_type].present? || params[:content_difficulty].present? ||
+          params[:content_quality].present?
       end
-      
-      def filter_by_review_details
-        review_query = Review.all
-        
-        review_query = review_query.where(period_year: params[:period_year]) if params[:period_year].present?
-        review_query = review_query.where(period_term: params[:period_term]) if params[:period_term].present?
-        review_query = review_query.where(textbook: params[:textbook]) if params[:textbook].present?
-        review_query = review_query.where(attendance: params[:attendance]) if params[:attendance].present?
-        review_query = review_query.where(grading_type: params[:grading_type]) if params[:grading_type].present?
-        review_query = review_query.where(content_difficulty: params[:content_difficulty]) if params[:content_difficulty].present?
-        review_query = review_query.where(content_quality: params[:content_quality]) if params[:content_quality].present?
-        
-        review_query.distinct.pluck(:lecture_id)
-      end
-      
-      def get_sorted_lecture_ids(lectures_query)
-        case params[:sort]
-        when 'newest'
-          # 最新のレビューがある授業順（レビューのない授業は最後）
-          lectures_query.left_joins(:reviews)
-                       .group('lectures.id')
-                       .order(Arel.sql('MAX(reviews.created_at) DESC'), 'lectures.created_at DESC')
-                       .pluck('lectures.id')
-        when 'highestRating'
-          # 評価が高い順（レビューのない授業は最後）
-          lectures_query.left_joins(:reviews)
-                       .group('lectures.id')
-                       .order(Arel.sql('AVG(reviews.rating) DESC'), 'lectures.created_at DESC')
-                       .pluck('lectures.id')
-        when 'mostReviewed'
-          # レビュー件数順（レビューのない授業は最後）
-          lectures_query.left_joins(:reviews)
-                       .group('lectures.id')
-                       .order(Arel.sql('COUNT(reviews.id) DESC'), 'lectures.created_at DESC')
-                       .pluck('lectures.id')
-        else
-          # デフォルトは作成日順
-          lectures_query.order(created_at: :desc).pluck('lectures.id')
+
+      def filter_lectures_by_review_details(lectures)
+        # JOINを使ってより効率的に
+        conditions = []
+        params_values = []
+
+        if params[:period_year].present?
+          conditions << 'reviews.period_year = ?'
+          params_values << params[:period_year]
         end
-      end
 
-      def apply_sorting_and_pagination(lectures_query, page, per_page)
-        # ソート処理とページネーション
-        sorted_lecture_ids = get_sorted_lecture_ids(lectures_query)
-        
-        # ページネーション
-        offset = (page - 1) * per_page
-        paginated_ids = sorted_lecture_ids.slice(offset, per_page) || []
+        if params[:period_term].present?
+          conditions << 'reviews.period_term = ?'
+          params_values << params[:period_term]
+        end
 
-        return [] if paginated_ids.empty?
+        if params[:textbook].present?
+          conditions << 'reviews.textbook = ?'
+          params_values << params[:textbook]
+        end
 
-        # ソートされたIDに基づいて実際のレコードを取得
-        lectures = Lecture.eager_load(:reviews).where(id: paginated_ids)
-        
-        # IDの順序を保持してソート
-        lectures.sort_by { |lecture| paginated_ids.index(lecture.id) }
+        if params[:attendance].present?
+          conditions << 'reviews.attendance = ?'
+          params_values << params[:attendance]
+        end
+
+        if params[:grading_type].present?
+          conditions << 'reviews.grading_type = ?'
+          params_values << params[:grading_type]
+        end
+
+        if params[:content_difficulty].present?
+          conditions << 'reviews.content_difficulty = ?'
+          params_values << params[:content_difficulty]
+        end
+
+        if params[:content_quality].present?
+          conditions << 'reviews.content_quality = ?'
+          params_values << params[:content_quality]
+        end
+
+        return lectures if conditions.empty?
+
+        # JOINクエリで効率的に検索
+        lectures.joins(:reviews)
+                .where(conditions.join(' AND '), *params_values)
+                .distinct
       end
     end
   end
