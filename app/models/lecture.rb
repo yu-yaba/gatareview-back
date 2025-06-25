@@ -5,10 +5,11 @@ class Lecture < ApplicationRecord
   validates :title, :lecturer, :faculty, presence: true
   validates :title, uniqueness: { scope: %i[lecturer faculty] }
 
-  # 検索用スコープ（ILIKE使用でより効率的な大文字小文字を区別しない検索）
+  # 検索用スコープ（MySQL対応：LIKEを使用した大文字小文字を区別しない検索）
   scope :search_by_title_and_lecturer, ->(query) {
     sanitized_query = "%#{sanitize_sql_like(query.to_s)}%"
-    where("title ILIKE ? OR lecturer ILIKE ?", sanitized_query, sanitized_query)
+    # MySQLではLIKEがデフォルトで大文字小文字を区別しないため、ILIKEの代わりにLIKEを使用
+    where("title LIKE ? OR lecturer LIKE ?", sanitized_query, sanitized_query)
   }
 
   def self.average_rating(lectures)
