@@ -25,13 +25,13 @@ class Lecture < ApplicationRecord
   def self.as_json_reviews(lectures)
     # 一度に全ての平均評価を取得
     avg_ratings = average_rating(lectures)
-    
+
     # レビュー数も一度に取得（必要な場合のみ）
     lecture_ids = lectures.is_a?(ActiveRecord::Relation) ? lectures.pluck(:id) : lectures.map(&:id)
     review_counts = Review.where(lecture_id: lecture_ids)
-                         .group(:lecture_id)
-                         .count
-    
+                          .group(:lecture_id)
+                          .count
+
     # 必要なカラムのみ選択して効率化
     lectures.select(:id, :title, :lecturer, :faculty, :created_at, :updated_at).map do |lecture|
       {
