@@ -17,7 +17,13 @@ class Lecture < ApplicationRecord
 
   def self.average_rating(lectures)
     # 効率的な平均評価計算
-    lecture_ids = lectures.is_a?(ActiveRecord::Relation) ? lectures.pluck(:id) : lectures.map(&:id)
+    # DISTINCTクエリの場合、pluckが問題を起こす可能性があるため安全に取得
+    lecture_ids = if lectures.is_a?(ActiveRecord::Relation)
+                    # DISTINCTクエリの場合は一度materializeしてからmap
+                    lectures.to_a.map(&:id)
+                  else
+                    lectures.map(&:id)
+                  end
     return {} if lecture_ids.empty?
 
     Review.where(lecture_id: lecture_ids)
@@ -30,7 +36,13 @@ class Lecture < ApplicationRecord
     avg_ratings = average_rating(lectures)
 
     # レビュー数も一度に取得（必要な場合のみ）
-    lecture_ids = lectures.is_a?(ActiveRecord::Relation) ? lectures.pluck(:id) : lectures.map(&:id)
+    # DISTINCTクエリの場合、pluckが問題を起こす可能性があるため安全に取得
+    lecture_ids = if lectures.is_a?(ActiveRecord::Relation)
+                    # DISTINCTクエリの場合は一度materializeしてからpluck
+                    lectures.to_a.map(&:id)
+                  else
+                    lectures.map(&:id)
+                  end
     review_counts = Review.where(lecture_id: lecture_ids)
                           .group(:lecture_id)
                           .count
@@ -44,8 +56,8 @@ class Lecture < ApplicationRecord
         faculty: lecture.faculty,
         created_at: lecture.created_at,
         updated_at: lecture.updated_at,
-        avg_rating: (avg_ratings[lecture.id] || 0).round(1),
-        review_count: review_counts[lecture.id] || 0
+        avg_rating: (avg_ratings[lecture.id.to_s] || 0).round(1),
+        review_count: review_counts[lecture.id.to_s] || 0
       }
     end
   end
