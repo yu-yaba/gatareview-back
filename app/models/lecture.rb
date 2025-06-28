@@ -2,6 +2,9 @@
 
 class Lecture < ApplicationRecord
   has_many :reviews
+  
+  before_validation :strip_attributes
+  
   validates :title, :lecturer, :faculty, presence: true
   validates :title, uniqueness: { scope: %i[lecturer faculty] }
 
@@ -45,5 +48,13 @@ class Lecture < ApplicationRecord
         review_count: review_counts[lecture.id] || 0
       }
     end
+  end
+
+  private
+
+  def strip_attributes
+    self.title = title&.strip
+    self.lecturer = lecturer&.strip
+    self.faculty = faculty&.strip
   end
 end
