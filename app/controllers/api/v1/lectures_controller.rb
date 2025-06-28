@@ -10,13 +10,33 @@ module Api
         # 効率的なクエリ構築
         @lectures = Lecture.all
 
-        # 検索条件が何もない場合は人気の授業を表示（レビュー数順）
-        no_search_params = !params[:search].present? && !params[:faculty].present? && !review_search_params_present?
-        if no_search_params
-          # レビューがある授業のみを表示し、レビュー数順でソート
+        # 検索条件とソート処理
+        has_search_params = params[:search].present? || params[:faculty].present? || review_search_params_present?
+        sort_param = params[:sort] || 'newest'
+        
+        # ソート処理
+        case sort_param
+        when 'highestRating'
+          # 評価の高い順（レビューがある授業のみ）
+          @lectures = @lectures.joins(:reviews)
+                               .group('lectures.id')
+                               .order('AVG(reviews.rating) DESC, COUNT(reviews.id) DESC')
+        when 'mostReviewed'
+          # レビュー数の多い順（レビューがある授業のみ）
           @lectures = @lectures.joins(:reviews)
                                .group('lectures.id')
                                .order('COUNT(reviews.id) DESC')
+        when 'newest'
+          # 検索条件がない場合のみ、レビューがある授業を優先表示
+          if !has_search_params
+            # レビューがある授業を優先し、その後に全ての授業を表示
+            @lectures = @lectures.left_joins(:reviews)
+                                 .group('lectures.id')
+                                 .order('COUNT(reviews.id) DESC, lectures.created_at DESC')
+          else
+            # 検索条件がある場合は通常の新しい順
+            @lectures = @lectures.order(created_at: :desc)
+          end
         end
 
         # 基本検索（キーワード、学部）
@@ -27,16 +47,23 @@ module Api
         # レビュー詳細項目による検索（JOINを使って効率化）
         @lectures = filter_lectures_by_review_details(@lectures) if review_search_params_present?
 
-        # 決定的なソート（IDでソート）を追加
-        @lectures = @lectures.order(:id)
+        # GROUP BYがない場合のみ決定的なソート（IDでソート）を追加
+        unless ['highestRating', 'mostReviewed'].include?(sort_param) || (!has_search_params && sort_param == 'newest')
+          @lectures = @lectures.order(:id)
+        end
 
-        # 総件数を効率的に取得（GROUP BYの場合はcountがハッシュになるため対応）
-        total_count = if no_search_params
-                        # GROUP BYを使用している場合、countの結果は異なる
-                        @lectures.unscoped.joins(:reviews).group('lectures.id').count.size
-                      else
-                        @lectures.count
-                      end
+        # 総件数を効率的に取得（詳細検索やGROUP BYの場合を適切に処理）
+        if review_search_params_present?
+          # 詳細検索の場合は専用のカウント処理
+          total_count = count_filtered_lectures_by_review_details
+        elsif ['highestRating', 'mostReviewed'].include?(sort_param) || (!has_search_params && sort_param == 'newest')
+          # GROUP BYを使用している場合、countの結果は異なる
+          count_result = @lectures.except(:order, :limit, :offset).count
+          total_count = count_result.is_a?(Hash) ? count_result.size : count_result
+        else
+          # 通常のcount（GROUP BYなし）
+          total_count = @lectures.except(:order, :limit, :offset, :group).count
+        end
 
         # ページネーション（limit/offsetを使用）
         offset = (page - 1) * per_page
@@ -106,7 +133,35 @@ module Api
       end
 
       def filter_lectures_by_review_details(lectures)
-        # JOINを使ってより効率的に
+        conditions, params_values = build_review_search_conditions
+        return lectures if conditions.empty?
+
+        # JOINクエリで効率的に検索（DISTINCTを使う場合はSELECTに必要なカラムを明示）
+        lectures.joins(:reviews)
+                .where(conditions.join(' AND '), *params_values)
+                .select('lectures.*')
+                .distinct
+      end
+
+      def count_filtered_lectures_by_review_details
+        conditions, params_values = build_review_search_conditions
+        return 0 if conditions.empty?
+
+        # 基本クエリを構築
+        base_query = Lecture.all
+
+        # 基本検索（キーワード、学部）の条件を追加
+        base_query = base_query.search_by_title_and_lecturer(params[:search]) if params[:search].present?
+        base_query = base_query.where(faculty: params[:faculty]) if params[:faculty].present?
+
+        # 詳細検索の条件を追加してDISTINCTでカウント
+        base_query.joins(:reviews)
+                  .where(conditions.join(' AND '), *params_values)
+                  .distinct
+                  .count
+      end
+
+      def build_review_search_conditions
         conditions = []
         params_values = []
 
@@ -145,12 +200,7 @@ module Api
           params_values << params[:content_quality]
         end
 
-        return lectures if conditions.empty?
-
-        # JOINクエリで効率的に検索
-        lectures.joins(:reviews)
-                .where(conditions.join(' AND '), *params_values)
-                .distinct
+        [conditions, params_values]
       end
     end
   end
