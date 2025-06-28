@@ -4,7 +4,7 @@ module Api
   module V1
     class LecturesController < ApplicationController
       def index
-        page = params[:page]&.to_i || 1
+        page = [params[:page]&.to_i || 1, 1].max
         per_page = 20
 
         # 効率的なクエリ構築
@@ -27,16 +27,10 @@ module Api
                                .group('lectures.id')
                                .order('COUNT(reviews.id) DESC')
         when 'newest'
-          # 検索条件がない場合のみ、レビューがある授業を優先表示
-          if !has_search_params
-            # レビューがある授業を優先し、その後に全ての授業を表示
-            @lectures = @lectures.left_joins(:reviews)
-                                 .group('lectures.id')
-                                 .order('COUNT(reviews.id) DESC, lectures.created_at DESC')
-          else
-            # 検索条件がある場合は通常の新しい順
-            @lectures = @lectures.order(created_at: :desc)
-          end
+          # 最新レビュー順（レビューの最新投稿日時順）
+          @lectures = @lectures.left_joins(:reviews)
+                               .group('lectures.id')
+                               .order('MAX(reviews.created_at) DESC, lectures.created_at DESC')
         end
 
         # 基本検索（キーワード、学部）
@@ -48,7 +42,7 @@ module Api
         @lectures = filter_lectures_by_review_details(@lectures) if review_search_params_present?
 
         # GROUP BYがない場合のみ決定的なソート（IDでソート）を追加
-        unless ['highestRating', 'mostReviewed'].include?(sort_param) || (!has_search_params && sort_param == 'newest')
+        unless ['highestRating', 'mostReviewed', 'newest'].include?(sort_param)
           @lectures = @lectures.order(:id)
         end
 
@@ -56,7 +50,7 @@ module Api
         if review_search_params_present?
           # 詳細検索の場合は専用のカウント処理
           total_count = count_filtered_lectures_by_review_details
-        elsif ['highestRating', 'mostReviewed'].include?(sort_param) || (!has_search_params && sort_param == 'newest')
+        elsif ['highestRating', 'mostReviewed', 'newest'].include?(sort_param)
           # GROUP BYを使用している場合、countの結果は異なる
           count_result = @lectures.except(:order, :limit, :offset).count
           total_count = count_result.is_a?(Hash) ? count_result.size : count_result
