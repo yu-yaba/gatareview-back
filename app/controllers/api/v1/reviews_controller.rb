@@ -30,7 +30,7 @@ module Api
       end
 
       def latest
-        @reviews = Review.includes(:lecture).order(created_at: :desc).limit(3)
+        @reviews = Review.includes(:lecture).order(created_at: :desc).limit(4)
         puts @reviews
         if @reviews.any?
           render json: @reviews.as_json(include: { lecture: { only: %i[id title lecturer] } },

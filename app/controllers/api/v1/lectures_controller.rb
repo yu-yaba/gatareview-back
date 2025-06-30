@@ -114,11 +114,11 @@ module Api
       end
 
       def popular
-        # レビュー数の多い順に上位5件の講義を取得
+        # レビュー数の多い順に上位4件の講義を取得
         @lectures = Lecture.joins(:reviews)
                           .group('lectures.id')
                           .order('COUNT(reviews.id) DESC')
-                          .limit(5)
+                          .limit(4)
 
         if @lectures.any?
           lectures_json = Lecture.as_json_reviews(@lectures)
