@@ -113,6 +113,36 @@ module Api
         end
       end
 
+      def popular
+        # レビュー数の多い順に上位5件の講義を取得
+        @lectures = Lecture.joins(:reviews)
+                          .group('lectures.id')
+                          .order('COUNT(reviews.id) DESC')
+                          .limit(5)
+
+        if @lectures.any?
+          lectures_json = Lecture.as_json_reviews(@lectures)
+          render json: { lectures: lectures_json }
+        else
+          render json: { lectures: [] }
+        end
+      end
+
+      def no_reviews
+        # レビューがない講義をランダムに4件取得
+        @lectures = Lecture.left_joins(:reviews)
+                          .where(reviews: { id: nil })
+                          .order('RAND()')
+                          .limit(4)
+
+        if @lectures.any?
+          lectures_json = Lecture.as_json_reviews(@lectures)
+          render json: { lectures: lectures_json }
+        else
+          render json: { lectures: [] }
+        end
+      end
+
       private
 
       def lecture_params
