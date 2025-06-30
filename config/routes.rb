@@ -3,6 +3,8 @@ Rails.application.routes.draw do
 
   namespace :api do
     namespace :v1 do
+      get '/lectures/popular', to: 'lectures#popular'
+      get '/lectures/no_reviews', to: 'lectures#no_reviews'
       resources :lectures do
         resources :reviews, only: %i[index create]
       end
