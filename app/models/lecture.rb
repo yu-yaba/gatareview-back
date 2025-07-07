@@ -2,6 +2,7 @@
 
 class Lecture < ApplicationRecord
   has_many :reviews
+  has_many :bookmarks, dependent: :destroy
   
   before_validation :strip_attributes
   
