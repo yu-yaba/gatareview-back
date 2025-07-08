@@ -46,4 +46,9 @@ Rails.application.configure do
   Rails.application.routes.default_url_options[:host] = 'localhost:3000'
 
   config.hosts << 'gatareview-back-b726b6ea4bcf.herokuapp.com'
+  
+  # Docker内部通信を許可
+  config.hosts << 'back:3000'
+  config.hosts << 'back'
+  config.hosts << 'localhost:3000'
 end

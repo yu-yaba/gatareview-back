@@ -48,9 +48,6 @@ ActiveRecord::Schema[7.0].define(version: 2025_07_07_153022) do
     t.datetime "updated_at", null: false
     t.bigint "user_id"
     t.integer "thanks_count", default: 0, null: false
-    t.index ["lecture_id", "content_difficulty"], name: "index_reviews_on_lecture_id_and_content_difficulty"
-    t.index ["lecture_id", "content_quality"], name: "index_reviews_on_lecture_id_and_content_quality"
-    t.index ["lecture_id", "period_year"], name: "index_reviews_on_lecture_id_and_period_year"
     t.index ["lecture_id"], name: "index_reviews_on_lecture_id"
     t.index ["user_id"], name: "index_reviews_on_user_id"
   end

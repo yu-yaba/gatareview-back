@@ -28,9 +28,17 @@ class AuthorizeApiRequest
   end
 
   def http_auth_header
-    if headers['Authorization'].present?
-      return headers['Authorization'].split(' ').last
+    auth_header = headers['Authorization']
+    Rails.logger.info "Authorization header present: #{auth_header.present?}"
+    Rails.logger.info "Raw Authorization header: #{auth_header}"
+    
+    if auth_header.present?
+      token = auth_header.split(' ').last
+      Rails.logger.info "Extracted token: #{token[0..20]}..." if token
+      return token
     end
+    
+    Rails.logger.info "No Authorization header found"
     nil
   end
 end
