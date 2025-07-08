@@ -12,12 +12,18 @@ Rails.application.routes.draw do
       get '/lectures/no_reviews', to: 'lectures#no_reviews'
       resources :lectures do
         resources :reviews, only: %i[index create]
-        resources :bookmarks, only: %i[create destroy show]
+        # カスタムブックマークルート
+        post 'bookmarks', to: 'bookmarks#create'
+        get 'bookmarks', to: 'bookmarks#show'
+        delete 'bookmarks', to: 'bookmarks#destroy'
       end
       
       # レビュー関連のルート
       resources :reviews, only: %i[update destroy] do
-        resources :thanks, only: %i[create destroy show]
+        # カスタムありがとうルート
+        post 'thanks', to: 'thanks#create'
+        get 'thanks', to: 'thanks#show'
+        delete 'thanks', to: 'thanks#destroy'
       end
       get '/reviews/total', to: 'reviews#total'
       get '/reviews/latest', to: 'reviews#latest'
