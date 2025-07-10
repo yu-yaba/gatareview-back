@@ -4,7 +4,7 @@ module Api
   module V1
     class ReviewsController < ApplicationController
       include Authenticatable
-      skip_before_action :authenticate_request, only: %i[index total latest]
+      skip_before_action :authenticate_request, only: %i[index total latest create]
       before_action :set_lecture, except: %i[total latest]
 
       def create
@@ -94,7 +94,7 @@ module Api
 
       def create_review(attributes)
         @review = @lecture.reviews.new(attributes)
-        @review.user = current_user # 認証されたユーザーを設定
+        @review.user = current_user if current_user # 認証されている場合のみユーザーを設定
         
         if @review.save
           render json: { 

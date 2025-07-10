@@ -21,6 +21,9 @@ module Api
         # ブックマークした授業一覧
         bookmarked_lectures = fetch_bookmarked_lectures
 
+        # ユーザーのレビュー一覧
+        user_reviews = fetch_user_reviews
+
         # レビュー数ランキングでの順位
         ranking_position = calculate_ranking_position
 
@@ -28,6 +31,7 @@ module Api
           user: user_info,
           statistics: statistics,
           bookmarked_lectures: bookmarked_lectures,
+          user_reviews: user_reviews,
           ranking_position: ranking_position
         }
       end
@@ -75,6 +79,35 @@ module Api
             # レビュー数と平均評価も含める
             review_count: lecture.reviews.count,
             avg_rating: lecture.reviews.average(:rating)&.round(1) || 0.0
+          }
+        end
+      end
+
+      def fetch_user_reviews
+        current_user.reviews
+                   .includes(:lecture)
+                   .order(created_at: :desc)
+                   .limit(10)
+                   .map do |review|
+          {
+            id: review.id,
+            rating: review.rating,
+            content: review.content,
+            created_at: review.created_at,
+            thanks_count: review.thanks_count || 0,
+            textbook: review.textbook,
+            attendance: review.attendance,
+            grading_type: review.grading_type,
+            content_difficulty: review.content_difficulty,
+            content_quality: review.content_quality,
+            period_year: review.period_year,
+            period_term: review.period_term,
+            lecture: {
+              id: review.lecture.id,
+              title: review.lecture.title,
+              lecturer: review.lecture.lecturer,
+              faculty: review.lecture.faculty
+            }
           }
         end
       end
