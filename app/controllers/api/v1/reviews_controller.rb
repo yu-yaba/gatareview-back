@@ -23,7 +23,12 @@ module Api
 
       def index
         reviews = @lecture.reviews.includes(:user)
-        render json: reviews.as_json(include: { user: { only: %i[id name avatar_url] } })
+        reviews_json = reviews.map do |review|
+          review_data = review.as_json
+          review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
+          review_data
+        end
+        render json: reviews_json
       end
 
       def total
@@ -69,13 +74,13 @@ module Api
       def latest
         @reviews = Review.includes(:lecture, :user).order(created_at: :desc).limit(4)
         if @reviews.any?
-          render json: @reviews.as_json(
-            include: { 
-              lecture: { only: %i[id title lecturer] },
-              user: { only: %i[id name avatar_url] }
-            },
-            only: %i[id rating content created_at]
-          )
+          reviews_json = @reviews.map do |review|
+            review_data = review.as_json(only: %i[id rating content created_at])
+            review_data['lecture'] = review.lecture.as_json(only: %i[id title lecturer faculty])
+            review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
+            review_data
+          end
+          render json: reviews_json
         else
           render json: { error: 'レビューが見つかりません。' }, status: :not_found
         end
