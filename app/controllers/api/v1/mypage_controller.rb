@@ -117,6 +117,9 @@ module Api
         # 同じレビュー数のユーザーには同じ順位を割り当て
         user_reviews_count = current_user.reviews.count
         
+        # reviews_countカラムを更新（カウンターキャッシュが無効な場合のため）
+        current_user.update_column(:reviews_count, user_reviews_count) if current_user.reviews_count != user_reviews_count
+        
         # 自分より多くレビューを投稿しているユーザー数 + 1 = 順位
         higher_ranked_users = User.where('reviews_count > ?', user_reviews_count).count
         
