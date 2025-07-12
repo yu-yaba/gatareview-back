@@ -5,7 +5,5 @@ class Review < ApplicationRecord
   belongs_to :user, optional: true # 既存データとの互換性のため一時的にoptional
   has_many :thanks, dependent: :destroy
 
-  validates :rating, uniqueness: { scope: %i[ content lecture_id textbook attendance
-                                              grading_type content_difficulty content_quality
-                                              period_year period_term] }
+  validates :user_id, uniqueness: { scope: :lecture_id, allow_nil: true, message: 'は同じ講義に複数のレビューを投稿できません' }
 end
