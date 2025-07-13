@@ -30,6 +30,8 @@ Rails.application.routes.draw do
       
       # マイページ
       get '/mypage', to: 'mypage#show'
+      get '/mypage/reviews', to: 'mypage#reviews'
+      get '/mypage/bookmarks', to: 'mypage#bookmarks'
     end
   end
 

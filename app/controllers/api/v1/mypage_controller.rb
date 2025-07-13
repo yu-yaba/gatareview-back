@@ -36,6 +36,112 @@ module Api
         }
       end
 
+      def reviews
+        page = params[:page]&.to_i || 1
+        per_page = params[:per_page]&.to_i || 10
+        per_page = [per_page, 50].min # 最大50件まで制限
+        
+        # ユーザーのレビュー一覧をページネーション付きで取得
+        reviews = current_user.reviews
+                             .includes(:lecture)
+                             .order(created_at: :desc)
+                             .offset((page - 1) * per_page)
+                             .limit(per_page)
+        
+        # 総レビュー数
+        total_count = current_user.reviews.count
+        total_pages = (total_count.to_f / per_page).ceil
+        
+        # レビューデータの整形
+        reviews_data = reviews.map do |review|
+          {
+            id: review.id,
+            rating: review.rating,
+            content: review.content,
+            created_at: review.created_at,
+            thanks_count: review.thanks_count || 0,
+            textbook: review.textbook,
+            attendance: review.attendance,
+            grading_type: review.grading_type,
+            content_difficulty: review.content_difficulty,
+            content_quality: review.content_quality,
+            period_year: review.period_year,
+            period_term: review.period_term,
+            user_id: review.user_id,
+            lecture: {
+              id: review.lecture.id,
+              title: review.lecture.title,
+              lecturer: review.lecture.lecturer,
+              faculty: review.lecture.faculty
+            }
+          }
+        end
+        
+        # 統計情報
+        statistics = {
+          total_reviews: total_count,
+          average_rating: current_user.reviews.average(:rating)&.round(1) || 0.0
+        }
+        
+        render json: {
+          reviews: reviews_data,
+          pagination: {
+            current_page: page,
+            total_pages: total_pages,
+            total_count: total_count,
+            per_page: per_page
+          },
+          statistics: statistics
+        }
+      end
+
+      def bookmarks
+        page = params[:page]&.to_i || 1
+        per_page = params[:per_page]&.to_i || 10
+        per_page = [per_page, 50].min # 最大50件まで制限
+        
+        # ユーザーのブックマーク一覧をページネーション付きで取得
+        bookmarks = current_user.bookmarks
+                               .includes(:lecture)
+                               .order(created_at: :desc)
+                               .offset((page - 1) * per_page)
+                               .limit(per_page)
+        
+        # 総ブックマーク数
+        total_count = current_user.bookmarks.count
+        total_pages = (total_count.to_f / per_page).ceil
+        
+        # ブックマークデータの整形
+        bookmarks_data = bookmarks.map do |bookmark|
+          lecture = bookmark.lecture
+          {
+            id: lecture.id,
+            title: lecture.title,
+            lecturer: lecture.lecturer,
+            faculty: lecture.faculty,
+            bookmarked_at: bookmark.created_at,
+            review_count: lecture.reviews.count,
+            avg_rating: lecture.reviews.average(:rating)&.round(1) || 0.0
+          }
+        end
+        
+        # 統計情報
+        statistics = {
+          total_bookmarks: total_count
+        }
+        
+        render json: {
+          bookmarks: bookmarks_data,
+          pagination: {
+            current_page: page,
+            total_pages: total_pages,
+            total_count: total_count,
+            per_page: per_page
+          },
+          statistics: statistics
+        }
+      end
+
       private
 
       def calculate_statistics
@@ -102,6 +208,7 @@ module Api
             content_quality: review.content_quality,
             period_year: review.period_year,
             period_term: review.period_term,
+            user_id: review.user_id,
             lecture: {
               id: review.lecture.id,
               title: review.lecture.title,
