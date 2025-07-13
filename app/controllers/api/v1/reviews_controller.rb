@@ -31,11 +31,12 @@ module Api
       end
 
       def index
-        reviews = @lecture.reviews.includes(:user)
+        reviews = @lecture.reviews.includes(:user, :thanks)
         reviews_json = reviews.map do |review|
           review_data = review.as_json
           review_data['user_id'] = review.user_id
           review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
+          review_data['thanks_count'] = review.thanks.count
           review_data
         end
         render json: reviews_json
