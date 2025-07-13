@@ -3,25 +3,43 @@
 module Api
   module V1
     class ReviewsController < ApplicationController
-      before_action :set_lecture, except: %i[total latest]
+      include Authenticatable
+      skip_before_action :authenticate_request, only: %i[index total latest]
+      before_action :set_lecture, except: %i[total latest update destroy]
 
       def create
-        token = params[:token]
+        # 認証されたユーザーのみレビューを作成可能
+        unless current_user
+          render json: { success: false, message: 'ログインが必要です。' }, status: :unauthorized
+          return
+        end
+
         review_attributes = review_params
-
-        verifier = RecaptchaVerifier.new(token, 'submit', 0.5)
-
-        if verifier.verify
-          # reCAPTCHAスコアが閾値以上の場合、レビューを即時に保存
-          create_review(review_attributes)
+        @review = @lecture.reviews.new(review_attributes)
+        @review.user = current_user
+        
+        if @review.save
+          review_data = @review.as_json(include: { user: { only: %i[id name avatar_url] } })
+          review_data['user_id'] = @review.user_id
+          render json: { 
+            success: true, 
+            review: review_data
+          }, status: :created
         else
-          render json: { success: false, message: 'reCAPTCHA認証に失敗しました。' }, status: :unprocessable_entity
+          render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
         end
       end
 
       def index
-        reviews = @lecture.reviews
-        render json: reviews
+        reviews = @lecture.reviews.includes(:user, :thanks)
+        reviews_json = reviews.map do |review|
+          review_data = review.as_json
+          review_data['user_id'] = review.user_id
+          review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
+          review_data['thanks_count'] = review.thanks.count
+          review_data
+        end
+        render json: reviews_json
       end
 
       def total
@@ -29,12 +47,53 @@ module Api
         render json: { count: total_reviews }
       end
 
+      def update
+        @review = Review.find(params[:id])
+        
+        # 投稿者本人かチェック
+        unless @review.user == current_user
+          render json: { error: '他のユーザーのレビューは編集できません' }, status: :forbidden
+          return
+        end
+        
+        if @review.update(review_params)
+          review_data = @review.as_json(include: { user: { only: %i[id name avatar_url] } })
+          review_data['user_id'] = @review.user_id
+          render json: { 
+            success: true, 
+            review: review_data
+          }
+        else
+          render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
+      def destroy
+        @review = Review.find(params[:id])
+        
+        # 投稿者本人かチェック
+        unless @review.user == current_user
+          render json: { error: '他のユーザーのレビューは削除できません' }, status: :forbidden
+          return
+        end
+        
+        if @review.destroy
+          render json: { success: true, message: 'レビューを削除しました' }
+        else
+          render json: { success: false, message: 'レビューの削除に失敗しました' }, status: :unprocessable_entity
+        end
+      end
+
       def latest
-        @reviews = Review.includes(:lecture).order(created_at: :desc).limit(4)
-        puts @reviews
+        @reviews = Review.includes(:lecture, :user).order(created_at: :desc).limit(4)
         if @reviews.any?
-          render json: @reviews.as_json(include: { lecture: { only: %i[id title lecturer] } },
-                                        only: %i[id rating content created_at])
+          reviews_json = @reviews.map do |review|
+            review_data = review.as_json(only: %i[id rating content created_at])
+            review_data['lecture'] = review.lecture.as_json(only: %i[id title lecturer faculty])
+            review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
+            review_data
+          end
+          render json: reviews_json
         else
           render json: { error: 'レビューが見つかりません。' }, status: :not_found
         end
@@ -51,14 +110,6 @@ module Api
                                        :grading_type, :content_difficulty, :content_quality)
       end
 
-      def create_review(attributes)
-        @review = @lecture.reviews.new(attributes)
-        if @review.save
-          render json: { success: true, review: @review }, status: :created
-        else
-          render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
-        end
-      end
     end
   end
 end
