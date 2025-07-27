@@ -21,7 +21,8 @@ class Api::V1::AuthController < ApplicationController
         
         if user.persisted?
           # JWTトークンを生成
-          token = JsonWebToken.encode(user.jwt_payload, 7.days.from_now)
+          expiration = params[:remember] ? 30.days.from_now : 7.days.from_now
+          token = JsonWebToken.encode(user.jwt_payload, expiration)
           Rails.logger.info "JWT token generated: #{token.present? ? 'SUCCESS' : 'FAILED'}"
           Rails.logger.info "JWT token (first 20 chars): #{token[0..20]}..." if token
           
