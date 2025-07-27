@@ -4,7 +4,7 @@ class JsonWebToken
                ENV['RAILS_SECRET_KEY_BASE'] || 
                raise('JWT_SECRET_KEY または RAILS_SECRET_KEY_BASE が設定されていません')
 
-  def self.encode(payload, exp = 24.hours.from_now)
+  def self.encode(payload, exp = 7.days.from_now)
     payload[:exp] = exp.to_i
     payload[:iat] = Time.current.to_i # 発行時刻を追加
     JWT.encode(payload, SECRET_KEY, 'HS256')
