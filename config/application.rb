@@ -11,10 +11,20 @@ module App
     # Initialize configuration defaults for originally generated Rails version.
     config.middleware.insert_before 0, Rack::Cors do
       allow do
-        origins 'http://localhost:8080' # フロントエンドのオリジン
+        # 環境に応じた許可オリジンの設定
+        if Rails.env.development?
+          origins 'http://localhost:8080', 'http://localhost:3000'
+        elsif Rails.env.production?
+          # 本番環境のフロントエンドURLを設定（実際のドメインに変更）
+          origins ENV['FRONTEND_URL'] || 'https://gatareview.vercel.app'
+        else
+          origins 'http://localhost:8080'
+        end
+        
         resource '*',
                  headers: :any,
-                 methods: %i[get post put patch delete options head]
+                 methods: %i[get post put patch delete options head],
+                 credentials: true
       end
     end
 
