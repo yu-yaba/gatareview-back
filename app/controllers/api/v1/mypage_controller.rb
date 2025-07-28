@@ -100,10 +100,21 @@ module Api
         per_page = params[:per_page]&.to_i || 10
         per_page = [per_page, 50].min # 最大50件まで制限
         
-        # ユーザーのブックマーク一覧をページネーション付きで取得
+        # N+1クエリ問題を解決: レビュー数と平均評価を一括取得
         bookmarks = current_user.bookmarks
-                               .includes(:lecture)
-                               .order(created_at: :desc)
+                               .joins(:lecture)
+                               .left_joins(lecture: :reviews)
+                               .select(
+                                 'bookmarks.*',
+                                 'lectures.id as lecture_id',
+                                 'lectures.title',
+                                 'lectures.lecturer',
+                                 'lectures.faculty',
+                                 'COUNT(reviews.id) as review_count',
+                                 'ROUND(AVG(reviews.rating), 1) as avg_rating'
+                               )
+                               .group('bookmarks.id', 'lectures.id')
+                               .order('bookmarks.created_at DESC')
                                .offset((page - 1) * per_page)
                                .limit(per_page)
         
@@ -113,15 +124,14 @@ module Api
         
         # ブックマークデータの整形
         bookmarks_data = bookmarks.map do |bookmark|
-          lecture = bookmark.lecture
           {
-            id: lecture.id,
-            title: lecture.title,
-            lecturer: lecture.lecturer,
-            faculty: lecture.faculty,
+            id: bookmark.lecture_id,
+            title: bookmark.title,
+            lecturer: bookmark.lecturer,
+            faculty: bookmark.faculty,
             bookmarked_at: bookmark.created_at,
-            review_count: lecture.reviews.count,
-            avg_rating: lecture.reviews.average(:rating)&.round(1) || 0.0
+            review_count: bookmark.review_count.to_i,
+            avg_rating: bookmark.avg_rating&.to_f || 0.0
           }
         end
         
@@ -170,21 +180,33 @@ module Api
       end
 
       def fetch_bookmarked_lectures
-        current_user.bookmarks
-                   .includes(:lecture)
-                   .order(created_at: :desc)
-                   .limit(10)
-                   .map do |bookmark|
-          lecture = bookmark.lecture
+        # N+1クエリ問題を解決: レビュー数と平均評価を一括取得
+        bookmarks = current_user.bookmarks
+                               .joins(:lecture)
+                               .left_joins(lecture: :reviews)
+                               .select(
+                                 'bookmarks.*',
+                                 'lectures.id as lecture_id',
+                                 'lectures.title',
+                                 'lectures.lecturer',
+                                 'lectures.faculty',
+                                 'COUNT(reviews.id) as review_count',
+                                 'ROUND(AVG(reviews.rating), 1) as avg_rating'
+                               )
+                               .group('bookmarks.id', 'lectures.id')
+                               .order('bookmarks.created_at DESC')
+                               .limit(10)
+        
+        bookmarks.map do |bookmark|
           {
-            id: lecture.id,
-            title: lecture.title,
-            lecturer: lecture.lecturer,
-            faculty: lecture.faculty,
+            id: bookmark.lecture_id,
+            title: bookmark.title,
+            lecturer: bookmark.lecturer,
+            faculty: bookmark.faculty,
             bookmarked_at: bookmark.created_at,
             # レビュー数と平均評価も含める
-            review_count: lecture.reviews.count,
-            avg_rating: lecture.reviews.average(:rating)&.round(1) || 0.0
+            review_count: bookmark.review_count.to_i,
+            avg_rating: bookmark.avg_rating&.to_f || 0.0
           }
         end
       end
