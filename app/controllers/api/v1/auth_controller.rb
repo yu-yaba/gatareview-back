@@ -24,7 +24,7 @@ class Api::V1::AuthController < ApplicationController
           expiration = params[:remember] ? 30.days.from_now : 7.days.from_now
           token = JsonWebToken.encode(user.jwt_payload, expiration)
           Rails.logger.info "JWT token generated: #{token.present? ? 'SUCCESS' : 'FAILED'}"
-          Rails.logger.info "JWT token (first 20 chars): #{token[0..20]}..." if token
+          Rails.logger.info "JWT token generated successfully" if token
           
           render json: {
             message: 'ログインに成功しました',
@@ -80,8 +80,7 @@ class Api::V1::AuthController < ApplicationController
     return nil if token.blank?
     
     Rails.logger.info "=== Google Token Verification START ==="
-    Rails.logger.info "Token length: #{token.length}"
-    Rails.logger.info "Token first 50 chars: #{token[0..50]}..."
+    Rails.logger.info "Token received for verification"
     Rails.logger.info "Google Client ID: #{ENV['GOOGLE_CLIENT_ID'] ? 'Set' : 'NOT SET'}"
     Rails.logger.info "Expected Client ID: #{ENV['GOOGLE_CLIENT_ID']}"
     

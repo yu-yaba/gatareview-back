@@ -1,8 +1,10 @@
 class JsonWebToken
-  # セキュリティ強化: フォールバック値を削除し、環境変数から取得
-  SECRET_KEY = Rails.application.credentials.secret_key_base || 
+  # セキュリティ強化: JWT専用の秘密鍵を使用
+  SECRET_KEY = ENV['JWT_SECRET_KEY'] || 
+               Rails.application.credentials.jwt_secret_key ||
+               Rails.application.credentials.secret_key_base || 
                ENV['RAILS_SECRET_KEY_BASE'] || 
-               raise('JWT_SECRET_KEY または RAILS_SECRET_KEY_BASE が設定されていません')
+               raise('JWT_SECRET_KEY が設定されていません。JWT専用の秘密鍵を設定してください')
 
   def self.encode(payload, exp = 30.days.from_now)
     payload[:exp] = exp.to_i

@@ -30,12 +30,17 @@ class AuthorizeApiRequest
   def http_auth_header
     auth_header = headers['Authorization']
     Rails.logger.info "Authorization header present: #{auth_header.present?}"
-    Rails.logger.info "Raw Authorization header: #{auth_header}"
     
     if auth_header.present?
-      token = auth_header.split(' ').last
-      Rails.logger.info "Extracted token: #{token[0..20]}..." if token
-      return token
+      # Bearer形式の厳密な検証
+      if auth_header.match(/\ABearer\s+(.+)\z/)
+        token = $1
+        Rails.logger.info "Valid Bearer token extracted"
+        return token
+      else
+        Rails.logger.warn "Invalid Authorization header format - must be 'Bearer <token>'"
+        return nil
+      end
     end
     
     Rails.logger.info "No Authorization header found"
