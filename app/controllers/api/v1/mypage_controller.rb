@@ -224,15 +224,20 @@ module Api
         # 同じレビュー数のユーザーには同じ順位を割り当て
         user_reviews_count = current_user.reviews.count
         
-        # reviews_countカラムを更新（カウンターキャッシュが無効な場合のため）
-        current_user.update_column(:reviews_count, user_reviews_count) if current_user.reviews_count != user_reviews_count
+        # 実際のレビュー数に基づいて動的にランキングを計算
+        # カウンターキャッシュに依存せず、正確な数値を使用
+        users_with_more_reviews = User.joins(:reviews)
+                                     .group('users.id')
+                                     .having('COUNT(reviews.id) > ?', user_reviews_count)
+                                     .count.length
         
-        # 自分より多くレビューを投稿しているユーザー数 + 1 = 順位
-        higher_ranked_users = User.where('reviews_count > ?', user_reviews_count).count
+        total_users_with_reviews = User.joins(:reviews)
+                                      .distinct
+                                      .count
         
         {
-          position: higher_ranked_users + 1,
-          total_users: User.where('reviews_count > 0').count,
+          position: users_with_more_reviews + 1,
+          total_users: total_users_with_reviews,
           user_reviews_count: user_reviews_count
         }
       end
