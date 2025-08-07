@@ -4,19 +4,13 @@ module Api
   module V1
     class ReviewsController < ApplicationController
       include Authenticatable
-      skip_before_action :authenticate_request, only: %i[index total latest]
+      skip_before_action :authenticate_request, only: %i[index total latest create]
       before_action :set_lecture, except: %i[total latest update destroy]
 
       def create
-        # 認証されたユーザーのみレビューを作成可能
-        unless current_user
-          render json: { success: false, message: 'ログインが必要です。' }, status: :unauthorized
-          return
-        end
-
         review_attributes = review_params
         @review = @lecture.reviews.new(review_attributes)
-        @review.user = current_user
+        @review.user = current_user if current_user
         
         if @review.save
           review_data = @review.as_json(include: { user: { only: %i[id name avatar_url] } })
