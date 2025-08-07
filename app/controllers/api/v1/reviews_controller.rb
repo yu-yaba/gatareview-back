@@ -4,7 +4,8 @@ module Api
   module V1
     class ReviewsController < ApplicationController
       include Authenticatable
-      skip_before_action :authenticate_request, only: %i[index total latest create]
+      skip_before_action :authenticate_request, only: %i[index total latest]
+      before_action :authenticate_optional_for_create, only: [:create]
       before_action :set_lecture, except: %i[total latest update destroy]
 
       def create
@@ -94,6 +95,10 @@ module Api
       end
 
       private
+
+      def authenticate_optional_for_create
+        authenticate_optional
+      end
 
       def set_lecture
         @lecture = Lecture.find(params[:lecture_id])
