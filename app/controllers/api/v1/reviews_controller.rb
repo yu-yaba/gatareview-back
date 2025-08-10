@@ -4,7 +4,7 @@ module Api
   module V1
     class ReviewsController < ApplicationController
       include Authenticatable
-      skip_before_action :authenticate_request, only: %i[index total latest]
+      skip_before_action :authenticate_request, only: %i[index create total latest]
       before_action :authenticate_optional_for_create, only: [:create]
       before_action :set_lecture, except: %i[total latest update destroy]
 
