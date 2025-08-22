@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2025_07_07_153022) do
+ActiveRecord::Schema[7.0].define(version: 2025_08_21_074843) do
   create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
@@ -33,6 +33,18 @@ ActiveRecord::Schema[7.0].define(version: 2025_07_07_153022) do
     t.index ["title"], name: "index_lectures_on_title"
   end
 
+  create_table "review_periods", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.string "period_name", null: false, comment: "期間名 (例: 2025-spring)"
+    t.datetime "start_date", null: false, comment: "期間開始日"
+    t.datetime "end_date", null: false, comment: "期間終了日"
+    t.boolean "is_active", default: false, null: false, comment: "現在有効な期間かを示すフラグ"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["is_active"], name: "index_review_periods_on_is_active"
+    t.index ["period_name"], name: "index_review_periods_on_period_name", unique: true
+    t.index ["start_date", "end_date"], name: "index_review_periods_on_start_date_and_end_date"
+  end
+
   create_table "reviews", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.float "rating"
     t.text "content"
@@ -48,6 +60,9 @@ ActiveRecord::Schema[7.0].define(version: 2025_07_07_153022) do
     t.datetime "updated_at", null: false
     t.bigint "user_id"
     t.integer "thanks_count", default: 0, null: false
+    t.index ["lecture_id", "content_difficulty"], name: "index_reviews_on_lecture_id_and_content_difficulty"
+    t.index ["lecture_id", "content_quality"], name: "index_reviews_on_lecture_id_and_content_quality"
+    t.index ["lecture_id", "period_year"], name: "index_reviews_on_lecture_id_and_period_year"
     t.index ["lecture_id"], name: "index_reviews_on_lecture_id"
     t.index ["user_id"], name: "index_reviews_on_user_id"
   end
@@ -60,6 +75,17 @@ ActiveRecord::Schema[7.0].define(version: 2025_07_07_153022) do
     t.index ["review_id"], name: "index_thanks_on_review_id"
     t.index ["user_id", "review_id"], name: "index_thanks_on_user_id_and_review_id", unique: true
     t.index ["user_id"], name: "index_thanks_on_user_id"
+  end
+
+  create_table "user_review_period_counts", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false, comment: "ユーザーID"
+    t.bigint "review_period_id", null: false, comment: "レビュー期間ID"
+    t.integer "reviews_count", default: 0, null: false, comment: "期間内のレビュー投稿数"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["review_period_id"], name: "index_user_review_period_counts_on_review_period_id"
+    t.index ["user_id", "review_period_id"], name: "index_user_period_counts_unique", unique: true
+    t.index ["user_id"], name: "index_user_review_period_counts_on_user_id"
   end
 
   create_table "users", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -80,4 +106,6 @@ ActiveRecord::Schema[7.0].define(version: 2025_07_07_153022) do
   add_foreign_key "reviews", "users"
   add_foreign_key "thanks", "reviews"
   add_foreign_key "thanks", "users"
+  add_foreign_key "user_review_period_counts", "review_periods"
+  add_foreign_key "user_review_period_counts", "users"
 end
