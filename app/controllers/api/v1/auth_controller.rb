@@ -61,7 +61,8 @@ class Api::V1::AuthController < ApplicationController
           id: current_user.id,
           email: current_user.email,
           name: current_user.name,
-          avatar_url: current_user.avatar_url
+          avatar_url: current_user.avatar_url,
+          reviews_count: current_user.reviews_count
         }
       }, status: :ok
     else

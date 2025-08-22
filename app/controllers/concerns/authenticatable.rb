@@ -25,4 +25,8 @@ module Authenticatable
     result = AuthorizeApiRequest.call(request.headers)
     @current_user = result[:result]
   end
+
+  def authenticate_optional_for_create
+    authenticate_optional
+  end
 end
