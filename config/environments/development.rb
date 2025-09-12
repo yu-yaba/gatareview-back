@@ -48,7 +48,7 @@ Rails.application.configure do
   config.hosts << 'gatareview-back-b726b6ea4bcf.herokuapp.com'
   
   # Docker内部通信を許可
-  config.hosts << 'back:3000'
-  config.hosts << 'back'
   config.hosts << 'localhost:3000'
+  config.hosts << "gatareview-back"
+  config.hosts << "gatareview-back:3000"
 end
