@@ -63,6 +63,19 @@ class Lecture < ApplicationRecord
     end
   end
 
+  def as_json_with_reviews
+    # 関連するレビューの平均評価と数を計算
+    # to_f を使って小数点以下の除算を保証
+    avg_rating = reviews.average(:rating) || 0
+    review_count = reviews.count
+
+    # as_jsonで基本属性を取得し、追加情報をマージ
+    as_json.merge(
+      avg_rating: avg_rating.round(1),
+      review_count: review_count
+    )
+  end
+
   private
 
   def strip_attributes

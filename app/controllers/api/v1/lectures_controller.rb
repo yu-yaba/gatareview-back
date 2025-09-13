@@ -97,7 +97,7 @@ module Api
         @lecture = Lecture.find_by(id: params[:id])
 
         if @lecture
-          render json: @lecture
+          render json: @lecture.as_json_with_reviews
         else
           render json: { error: '指定された講義は存在しません。' }, status: :not_found
         end
