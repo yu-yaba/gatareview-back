@@ -160,9 +160,6 @@ module Api
 
       # レビュー閲覧権限をチェック（期間ベース対応）
       def has_review_access?
-        Rails.logger.info "=== PERIOD-BASED REVIEW ACCESS CHECK ==="
-        Rails.logger.info "Current user: #{current_user&.id}"
-        
         return false unless current_user
         
         # 現在の期間を取得
@@ -170,23 +167,17 @@ module Api
         if current_period
           # 期間ベースの権限チェック
           period_reviews_count = current_user.reviews_count_for_period(current_period)
-          Rails.logger.info "Period: #{current_period.period_name}"
-          Rails.logger.info "Period reviews count: #{period_reviews_count}"
           
           if period_reviews_count >= 1
-            Rails.logger.info "✅ Access granted: User has #{period_reviews_count} reviews in current period"
             return true
           end
         else
           # 期間が設定されていない場合は従来の全体レビュー数ベースで判定
-          Rails.logger.info "No active period found, using global reviews count: #{current_user.reviews_count}"
           if current_user.reviews_count >= 1
-            Rails.logger.info "✅ Access granted: User has #{current_user.reviews_count} total reviews"
             return true
           end
         end
         
-        Rails.logger.info "❌ Access denied: Insufficient reviews for current period"
         false
       end
 
