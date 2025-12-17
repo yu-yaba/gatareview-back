@@ -108,10 +108,10 @@ module Api
       end
 
       def require_admin_privileges
-        # TODO: 実際の管理者権限チェックを実装
-        # 現在は仮実装として認証済みユーザーのみ許可
-        unless current_user
+        # 管理者権限チェック（環境変数 ADMIN_EMAILS/ADMIN_EMAIL でホワイトリスト管理）
+        unless current_user&.admin?
           render json: { error: '管理者権限が必要です' }, status: :forbidden
+          return
         end
       end
     end

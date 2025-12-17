@@ -5,11 +5,16 @@ module Api
     class ReviewsController < ApplicationController
       include Authenticatable
       skip_before_action :authenticate_request, only: %i[index create total latest]
-      before_action :authenticate_optional, only: [:index]
+      before_action :authenticate_optional, only: %i[index latest]
       before_action :authenticate_optional_for_create, only: [:create]
       before_action :set_lecture, except: %i[total latest update destroy]
 
       def create
+        unless recaptcha_verified?
+          render json: { success: false, message: 'reCAPTCHA認証に失敗しました' }, status: :unprocessable_entity
+          return
+        end
+
         review_attributes = review_params
         @review = @lecture.reviews.new(review_attributes)
         @review.user = current_user if current_user
@@ -109,10 +114,14 @@ module Api
       def latest
         @reviews = Review.includes(:lecture, :user).order(created_at: :desc).limit(4)
         if @reviews.any?
+          access_granted = has_review_access?
+
           reviews_json = @reviews.map do |review|
-            review_data = review.as_json(only: %i[id rating content created_at])
+            review_data = review.as_json(only: %i[id rating created_at])
+            review_data['content'] = access_granted ? review.content : mask_review_content(review.content)
             review_data['lecture'] = review.lecture.as_json(only: %i[id title lecturer faculty])
             review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
+            review_data['access_granted'] = access_granted
             review_data
           end
           render json: reviews_json
@@ -132,12 +141,25 @@ module Api
         params.require(:review).permit(:rating, :content, :period_year, :period_term, :textbook, :attendance,
                                        :grading_type, :content_difficulty, :content_quality)
       end
+      
+      def recaptcha_verified?
+        # テスト環境は外部通信しない
+        return true if Rails.env.test?
+
+        # 本番環境では必須。開発環境は未設定でも動作できるようにスキップ可能にする。
+        if ENV['RECAPTCHA_SECRET_KEY'].blank?
+          Rails.logger.error('RECAPTCHA_SECRET_KEY is not set') if Rails.env.production?
+          return !Rails.env.production?
+        end
+        
+        return false if params[:token].blank?
+
+        verifier = RecaptchaVerifier.new(params[:token], 'submit', 0.5)
+        verifier.verify
+      end
 
       # レビュー閲覧権限をチェック（期間ベース対応）
       def has_review_access?
-        Rails.logger.info "=== PERIOD-BASED REVIEW ACCESS CHECK ==="
-        Rails.logger.info "Current user: #{current_user&.id}"
-        
         return false unless current_user
         
         # 現在の期間を取得
@@ -145,23 +167,17 @@ module Api
         if current_period
           # 期間ベースの権限チェック
           period_reviews_count = current_user.reviews_count_for_period(current_period)
-          Rails.logger.info "Period: #{current_period.period_name}"
-          Rails.logger.info "Period reviews count: #{period_reviews_count}"
           
           if period_reviews_count >= 1
-            Rails.logger.info "✅ Access granted: User has #{period_reviews_count} reviews in current period"
             return true
           end
         else
           # 期間が設定されていない場合は従来の全体レビュー数ベースで判定
-          Rails.logger.info "No active period found, using global reviews count: #{current_user.reviews_count}"
           if current_user.reviews_count >= 1
-            Rails.logger.info "✅ Access granted: User has #{current_user.reviews_count} total reviews"
             return true
           end
         end
         
-        Rails.logger.info "❌ Access denied: Insufficient reviews for current period"
         false
       end
 

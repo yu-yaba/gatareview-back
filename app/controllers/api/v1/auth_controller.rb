@@ -7,8 +7,9 @@ class Api::V1::AuthController < ApplicationController
   def google_oauth
     begin
       Rails.logger.info "=== Google OAuth Request ==="
-      Rails.logger.info "Request params: #{params.inspect}"
+      # NOTE: 認証トークンや個人情報がログに残らないように、値の出力はしない
       Rails.logger.info "Google token present: #{params[:token].present?}"
+      Rails.logger.info "Remember me: #{params[:remember].present?}"
       
       # Googleトークンを検証
       google_user_info = verify_google_token(params[:token])
@@ -83,20 +84,16 @@ class Api::V1::AuthController < ApplicationController
     Rails.logger.info "=== Google Token Verification START ==="
     Rails.logger.info "Token received for verification"
     Rails.logger.info "Google Client ID: #{ENV['GOOGLE_CLIENT_ID'] ? 'Set' : 'NOT SET'}"
-    Rails.logger.info "Expected Client ID: #{ENV['GOOGLE_CLIENT_ID']}"
     
     # Google OAuth2 APIを使用してトークンを検証
     url = "https://oauth2.googleapis.com/tokeninfo"
     query_params = { id_token: token }
     
     Rails.logger.info "Making request to: #{url}"
-    Rails.logger.info "Query params: #{query_params.inspect}"
     
     response = HTTParty.get(url, query: query_params, timeout: 10)
     
     Rails.logger.info "Google API response status: #{response.code}"
-    Rails.logger.info "Google API response headers: #{response.headers}"
-    Rails.logger.info "Google API response body: #{response.body}"
     
     if response.success?
       user_info = response.parsed_response
@@ -118,7 +115,6 @@ class Api::V1::AuthController < ApplicationController
       Rails.logger.error "❌ Google token verification failed"
       Rails.logger.error "Response code: #{response.code}"
       Rails.logger.error "Response message: #{response.message}"
-      Rails.logger.error "Response body: #{response.body}"
       nil
     end
   rescue HTTParty::Error, Net::TimeoutError => e

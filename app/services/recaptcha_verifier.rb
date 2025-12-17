@@ -3,8 +3,6 @@
 require 'httparty'
 
 class RecaptchaVerifier
-  RECAPTCHA_SECRET_KEY = ENV['RECAPTCHA_SECRET_KEY']
-
   attr_reader :score, :action
 
   def initialize(token, expected_action = 'submit', minimum_score = 0.5)
@@ -16,10 +14,13 @@ class RecaptchaVerifier
   end
 
   def verify
+    secret_key = ENV['RECAPTCHA_SECRET_KEY']
+    return false if secret_key.blank?
+
     response = HTTParty.post(
       'https://www.google.com/recaptcha/api/siteverify',
       body: {
-        secret: RECAPTCHA_SECRET_KEY,
+        secret: secret_key,
         response: @token
       }
     )

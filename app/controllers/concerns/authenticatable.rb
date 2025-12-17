@@ -9,15 +9,15 @@ module Authenticatable
   private
 
   def authenticate_request
-    Rails.logger.info "=== AUTHENTICATION DEBUG ==="
-    Rails.logger.info "Authorization header present: #{request.headers['Authorization'].present?}"
-    
     result = AuthorizeApiRequest.call(request.headers)
     @current_user = result[:result]
-    
-    Rails.logger.info "Current user authenticated: #{@current_user&.id.present? || false}"
-    Rails.logger.info "==============================="
-    
+
+    # セキュリティ/ノイズ対策: 本番環境では認証の詳細ログを出さない
+    if Rails.env.development?
+      Rails.logger.debug "Authorization header present: #{request.headers['Authorization'].present?}"
+      Rails.logger.debug "Current user authenticated: #{@current_user&.id.present? || false}"
+    end
+
     render json: { error: '認証が必要です' }, status: :unauthorized unless @current_user
   end
 

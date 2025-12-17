@@ -8,26 +8,6 @@ Bundler.require(*Rails.groups)
 
 module App
   class Application < Rails::Application
-    # Initialize configuration defaults for originally generated Rails version.
-    config.middleware.insert_before 0, Rack::Cors do
-      allow do
-        # 環境に応じた許可オリジンの設定
-        if Rails.env.development?
-          origins 'http://localhost:8080', 'http://localhost:3000'
-        elsif Rails.env.production?
-          # 本番環境のフロントエンドURLを設定（実際のドメインに変更）
-          origins ENV['FRONTEND_URL'] || 'https://gatareview.vercel.app'
-        else
-          origins 'http://localhost:8080'
-        end
-        
-        resource '*',
-                 headers: :any,
-                 methods: %i[get post put patch delete options head],
-                 credentials: true
-      end
-    end
-
     # lib配下もオートロード対象にする
     config.autoload_paths += %W[#{config.root}/lib]
     # Configuration for the application, engines, and railties goes here.
