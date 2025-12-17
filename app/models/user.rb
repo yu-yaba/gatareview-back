@@ -58,6 +58,16 @@ class User < ApplicationRecord
       avatar_url: avatar_url
     }
   end
+  
+  # 管理者権限判定（環境変数でホワイトリスト管理）
+  # 例: ADMIN_EMAILS="admin@example.com,ops@example.com"
+  def admin?
+    emails = ENV.fetch('ADMIN_EMAILS', '').split(',').map { |e| e.strip.downcase }.reject(&:blank?)
+    emails += [ENV.fetch('ADMIN_EMAIL', nil)].compact.map { |e| e.strip.downcase }.reject(&:blank?)
+    return false if emails.empty?
+
+    emails.include?(email.to_s.downcase)
+  end
 
   # アバター画像のURLを取得（デフォルト画像対応）
   def avatar_image_url
