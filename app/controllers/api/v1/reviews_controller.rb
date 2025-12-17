@@ -5,11 +5,16 @@ module Api
     class ReviewsController < ApplicationController
       include Authenticatable
       skip_before_action :authenticate_request, only: %i[index create total latest]
-      before_action :authenticate_optional, only: [:index]
+      before_action :authenticate_optional, only: %i[index latest]
       before_action :authenticate_optional_for_create, only: [:create]
       before_action :set_lecture, except: %i[total latest update destroy]
 
       def create
+        unless recaptcha_verified?
+          render json: { success: false, message: 'reCAPTCHA認証に失敗しました' }, status: :unprocessable_entity
+          return
+        end
+
         review_attributes = review_params
         @review = @lecture.reviews.new(review_attributes)
         @review.user = current_user if current_user
@@ -109,10 +114,14 @@ module Api
       def latest
         @reviews = Review.includes(:lecture, :user).order(created_at: :desc).limit(4)
         if @reviews.any?
+          access_granted = has_review_access?
+
           reviews_json = @reviews.map do |review|
-            review_data = review.as_json(only: %i[id rating content created_at])
+            review_data = review.as_json(only: %i[id rating created_at])
+            review_data['content'] = access_granted ? review.content : mask_review_content(review.content)
             review_data['lecture'] = review.lecture.as_json(only: %i[id title lecturer faculty])
             review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
+            review_data['access_granted'] = access_granted
             review_data
           end
           render json: reviews_json
@@ -131,6 +140,22 @@ module Api
       def review_params
         params.require(:review).permit(:rating, :content, :period_year, :period_term, :textbook, :attendance,
                                        :grading_type, :content_difficulty, :content_quality)
+      end
+      
+      def recaptcha_verified?
+        # テスト環境は外部通信しない
+        return true if Rails.env.test?
+
+        # 本番環境では必須。開発環境は未設定でも動作できるようにスキップ可能にする。
+        if ENV['RECAPTCHA_SECRET_KEY'].blank?
+          Rails.logger.error('RECAPTCHA_SECRET_KEY is not set') if Rails.env.production?
+          return !Rails.env.production?
+        end
+        
+        return false if params[:token].blank?
+
+        verifier = RecaptchaVerifier.new(params[:token], 'submit', 0.5)
+        verifier.verify
       end
 
       # レビュー閲覧権限をチェック（期間ベース対応）
