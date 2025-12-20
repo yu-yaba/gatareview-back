@@ -3,7 +3,7 @@
 FactoryBot.define do
   factory :review do
     rating { 5 }
-    content { 'とても良い講義でした。' }
+    content { 'この授業は内容が分かりやすく、課題も適度で学びが多かったです。おすすめです。' }
     period_year { 2023 }
     period_term { '春' }
     textbook { '良い教科書' }

@@ -37,34 +37,29 @@ module Api
       end
 
       def index
-        reviews = @lecture.reviews.includes(:user, :thanks)
-        
-        # レビュー閲覧権限をチェック
-        if has_review_access?
-          # 権限がある場合：完全なレビューデータを返す
-          reviews_json = reviews.map do |review|
-            review_data = review.as_json
-            review_data['user_id'] = review.user_id
-            review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
-            review_data['thanks_count'] = review.thanks.count
-            review_data['access_granted'] = true
-            review_data
+        reviews = @lecture.reviews.includes(:user, :thanks).order(created_at: :asc)
+
+        access_granted = has_review_access?
+
+        reviews_json = reviews.each_with_index.map do |review, index|
+          review_data = review.as_json
+          review_data['user_id'] = review.user_id
+          review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
+          review_data['thanks_count'] = review.thanks.count
+          review_data['access_granted'] = access_granted
+
+          unless access_granted
+            # 権限がない場合でも、最初に投稿されたレビュー（一覧の先頭）は全文表示する
+            unless index.zero?
+              # それ以外のコメントは先頭30文字のみ返す（フロントでぼかし表示）
+              review_data['content'] = mask_review_content(review.content) if review.content.present?
+            end
           end
-          render json: reviews_json
-        else
-          # 権限がない場合：部分的なレビューデータを返す（コメントを制限）
-          reviews_json = reviews.map do |review|
-            review_data = review.as_json
-            review_data['user_id'] = review.user_id
-            review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
-            review_data['thanks_count'] = review.thanks.count
-            review_data['access_granted'] = false
-            # コメントは部分的にマスク（フロントエンドでの処理と一致させる）
-            review_data['content'] = mask_review_content(review.content) if review.content.present?
-            review_data
-          end
-          render json: reviews_json
+
+          review_data
         end
+
+        render json: reviews_json
       end
 
       def total
@@ -184,22 +179,8 @@ module Api
       # レビューコンテンツを部分的にマスク
       def mask_review_content(content)
         return nil if content.blank?
-        
-        # 短いコメントの場合（50文字以下）は30%まで表示
-        if content.length <= 50
-          visible_length = (content.length * 0.3).floor
-          content[0, visible_length] + "..." if visible_length > 0
-        else
-          # 長いコメントの場合は1行目の半分まで表示
-          first_line_end = content.index("\n") || [content.length, 80].min
-          first_line = content[0, first_line_end]
-          visible_length = (first_line.length * 0.5).floor
-          if visible_length > 0
-            content[0, visible_length] + "..."
-          else
-            "..."
-          end
-        end
+
+        content[0, 30]
       end
 
     end
