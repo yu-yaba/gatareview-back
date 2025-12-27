@@ -109,14 +109,12 @@ module Api
       def latest
         @reviews = Review.includes(:lecture, :user).order(created_at: :desc).limit(4)
         if @reviews.any?
-          access_granted = has_review_access?
-
           reviews_json = @reviews.map do |review|
             review_data = review.as_json(only: %i[id rating created_at])
-            review_data['content'] = access_granted ? review.content : mask_review_content(review.content)
+            # ルートの最新レビューはログイン有無に関わらず全文を返す
+            review_data['content'] = review.content
             review_data['lecture'] = review.lecture.as_json(only: %i[id title lecturer faculty])
             review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
-            review_data['access_granted'] = access_granted
             review_data
           end
           render json: reviews_json
