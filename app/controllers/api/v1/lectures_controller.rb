@@ -3,6 +3,10 @@
 module Api
   module V1
     class LecturesController < ApplicationController
+      include Authenticatable
+      skip_before_action :authenticate_request, only: %i[index show popular no_reviews]
+      before_action :require_admin_privileges, only: [:create]
+
       def index
         page = [params[:page]&.to_i || 1, 1].max
         per_page = 20
@@ -147,6 +151,13 @@ module Api
 
       def lecture_params
         params.require(:lecture).permit(:title, :lecturer, :faculty)
+      end
+
+      def require_admin_privileges
+        unless current_user&.admin?
+          render json: { error: '管理者権限が必要です' }, status: :forbidden
+          return
+        end
       end
 
       def review_search_params_present?
