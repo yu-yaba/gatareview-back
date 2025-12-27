@@ -95,10 +95,7 @@ class User < ApplicationRecord
     count_record = user_review_period_counts.find_or_initialize_by(review_period: period)
     count_record.reviews_count = (count_record.reviews_count || 0) + 1
     count_record.save!
-    
-    # 全体のレビュー数も更新
-    increment!(:reviews_count)
-    
+
     count_record.reviews_count
   end
 
@@ -112,10 +109,7 @@ class User < ApplicationRecord
     
     count_record.reviews_count -= 1
     count_record.save!
-    
-    # 全体のレビュー数も更新
-    decrement!(:reviews_count) if reviews_count > 0
-    
+
     count_record.reviews_count
   end
 end
