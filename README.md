@@ -147,6 +147,24 @@ bundle exec rspec
 bundle exec rubocop
 ```
 
+## 授業 CSV 自動生成
+
+DB 登録は行わず、シラバス検索から seed 互換の CSV だけを生成します。
+
+```bash
+bin/rails lectures:export_csv YEAR=2026
+```
+
+任意の出力先を使う場合:
+
+```bash
+bin/rails lectures:export_csv YEAR=2026 OUTPUT_DIR=/path/to/output
+```
+
+## 運用ドキュメント
+
+- [`docs/annual-lecture-import-plan.md`](./docs/annual-lecture-import-plan.md)
+
 ## 重要な業務ルール
 
 - 同一ログインユーザーは同じ授業に複数レビューを投稿できません。
