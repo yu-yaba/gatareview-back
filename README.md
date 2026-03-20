@@ -1,159 +1,177 @@
-<img src="https://github.com/yu-yaba/gatareview-front/assets/109569162/8702c61e-ef49-4922-8261-e97048ecb208">
+# ガタレビュ Backend
 
-![Static Badge](https://img.shields.io/badge/https%3A%2F%2Fgithub.com%2Fyu-yaba%2Fgatareview-front)
-<img src="https://img.shields.io/badge/Ruby-CC342D?style=for-the-badge&logo=ruby&style=flat">
-<img src="https://img.shields.io/badge/Ruby_on_Rails-CC0000?style=for-the-badge&logo=ruby-on-rails&style=flat">
-<img src="https://img.shields.io/badge/-Docker-EEE.svg?logo=docker&style=flat">
+新潟大学向け授業レビューサービス「ガタレビュ」の Rails 7 API バックエンドです。  
+認証、授業・レビュー・ブックマーク・ありがとう・マイページ API、およびレビュー閲覧制御を担当します。
 
-## ガタレビュ！
-新潟大学の授業レビューサイトのバックエンドリポジトリです。レビューの登録ができます。
+- Production site: `https://www.gatareview.com`
+- Frontend repo: `https://github.com/yu-yaba/gatareview-front`
+- Agent guide: [`AGENTS.md`](./AGENTS.md)
 
-フロントエンドリポジトリはこちらです。
-  * https://github.com/yu-yaba/gatareview-front
+## 主な API 領域
 
-# URL
-https://www.gatareview.com
+- Auth
+  - Google OAuth 連携
+  - 現在ユーザー取得
+  - ログアウト
+- Lectures
+  - 授業検索
+  - 授業詳細
+  - 人気授業 / レビュー未投稿授業
+- Reviews
+  - 一覧取得
+  - 投稿
+  - 編集
+  - 削除
+  - 総件数 / 最新レビュー
+- Bookmarks
+  - 追加 / 解除 / 状態取得
+- Thanks
+  - 追加 / 解除 / 状態取得
+- Mypage
+  - 統計情報
+  - 投稿レビュー一覧
+  - ブックマーク一覧
+- ReviewPeriods
+  - レビュー閲覧制御用の期間管理
 
-レスポンシブ対応をしています。
+## 技術スタック
 
-# このサービスの理念
-## すべての新潟大学生に授業情報を、オープンに
+| 領域 | 技術 |
+| --- | --- |
+| Language | Ruby 3.2.2 |
+| Framework | Rails 7.0.6 |
+| API | Rails API mode |
+| Database | MySQL |
+| Auth | JWT, Google OAuth |
+| Test | RSpec, Factory Bot |
+| Lint | RuboCop |
 
-* 忙しい学生、授業情報を取得しにくい学生の力になりたい。
+## ディレクトリ構成
 
-* シラバスではわからない情報を共有することで、履修のミスマッチを減らしたい。
-
-
-# デモ
-### キーワード、学部での検索機能と並び替え機能があります。
-![ガタレビュデモ1](https://github.com/yu-yaba/gatareview-front/assets/109569162/a7e937e3-acae-4fd0-9c88-c78297ca3b9c)
-
-
-### レビューの登録ができます。
-![ガタレビュデモ2](https://github.com/yu-yaba/gatareview-front/assets/109569162/e475a83c-60da-499b-8ca3-9725cb341a88)
-
-# 開発期間
-* 2023年6月 Reactで開発　リポジトリ： https://github.com/yu-yaba/Lecture-review-site
-* 2023年9月 フロントエンドをNext.js, TypeScriptにリプレイス
-* 以降、アップデートを続けています。
-
-# 機能
-### ・ レビューの投稿
-### ・ 検索機能
-* キーワード検索
-* 学部による検索
-* 新しい順、レビュー件数順、評価が高い順で並び替え
-
-# 技術スタック
-| 領域 | 技術スタック |
-| ---- | ---- |
-| Frontend　| Next.js, TypeScript |
-| Backend | Ruby on Rails (apiモード) |
-| Database | MySQL (JawsDB) |
-| Infra | Vercel Heroku  AWS S3 |
-| Development | Docker |
-
-# 開発環境のセットアップ
-### フォルダ構造
-
-```
-|-- gatareview-front
-|-- gatareview-back
-|
-|-- docker
-|   |-- <DBのデータが入る。docker-compose buildすると自動作成されるので、ディレクトリを作成する必要はない。>
-|
-|-- docker-compose.yml
-|-- .env
+```text
+app/controllers/api/v1/   API エンドポイント
+app/controllers/concerns/ 認証 concern
+app/models/               ActiveRecord モデル
+app/services/             JWT、reCAPTCHA、認証補助
+config/routes.rb          API ルーティング
+spec/requests/            request spec
+spec/factories/           Factory Bot
 ```
 
-## リポジトリのクローン
-* このリポジトリをクローンする
-* フロントエンドリポジトリをcloneする
-  * https://github.com/yu-yaba/gatareview-front
+## 前提
 
+- Ruby 3.2.2
+- Bundler
+- MySQL 8 系を推奨
 
-## docker-compose.yml
+## セットアップ
 
-```yml
-services: 
-  gatareview-front:                             # Next.js用コンテナ
-    build:
-      context: ./gatareview-front
-    volumes:
-      - ./gatareview-front:/usr/src/app
-    command: 'npm run dev'
-    ports:
-      - "8080:3000"
-  gatareview-back:                              # Rails用コンテナ
-    build:
-      context: ./gatareview-back
-    ports:
-      - "3001:3000"
-    volumes:
-      - ./gatareview-back:/app
-    environment:                     # 環境変数の設定　.envファイルから取得
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_HOST: ${MYSQL_HOST}
-    depends_on:
-      - db
-  db:                                # Mysql用コンテナ
-    image: mysql:8.0.33
-    environment:                     # 環境変数の設定　.envファイルから取得
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    volumes:
-      - "./docker/db:/var/lib/mysql"
+1. 依存関係をインストール
+
+```bash
+bundle install
 ```
 
-## .env
-* docker-compose.ymlとRailsのdatabase.ymlのDBの設定値を管理するファイル
-* ルートディレクトリ直下に作成する
-* 任意の値を設定する
+2. `.env` を作成
+
+最小構成の例:
+
 ```env
-MYSQL_ROOT_PASSWORD=your_password
-MYSQL_DATABASE=your_database
-MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=gatareview_development
 MYSQL_USER=root
-MYSQL_HOST=db
+MYSQL_PASSWORD=your_password
+MYSQL_HOST=127.0.0.1
+
+JWT_SECRET_KEY=your_jwt_secret
+
+# Optional in development / required by feature
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+RECAPTCHA_SECRET_KEY=
+FRONTEND_URL=http://localhost:3000
 ```
 
-## .env.local
-* Next.jsの環境変数を設定するファイル
-* ここでは開発環境でapiにリクエストを送信する際の値を設定する
-* gatareview-front直下に作成する
-```env
-NEXT_PUBLIC_ENV=http://localhost:3001
+3. DB を作成してマイグレーション
+
+```bash
+bin/rails db:create
+bin/rails db:migrate
 ```
 
-### コンテナを起動
+4. サーバー起動
 
-* 初回起動時のみnode_modulesがないので以下を実行
-```
-docker-compose run --rm gatareview-front npm install
-```
-
-* コンテナをビルド
-```
-docker-compose up --build
+```bash
+bin/rails server
 ```
 
-* gatareview-backコンテナ内で、railsのマイグレーションを実行
+5. API は以下で待ち受けます
+
+```text
+http://localhost:3000
 ```
-docker-compose run --rm gatareview-back bin/rails db:migrate RAILS_ENV=development
+
+フロントエンドから利用する場合は、別途フロント側で `NEXT_PUBLIC_ENV` を backend の URL に合わせて設定してください。
+
+## 環境変数
+
+| 変数名 | 必須 | 用途 |
+| --- | --- | --- |
+| `MYSQL_DATABASE` | Yes | 開発 DB 名 |
+| `MYSQL_USER` | Yes | 開発 DB ユーザー |
+| `MYSQL_PASSWORD` | Yes | 開発 DB パスワード |
+| `MYSQL_HOST` | Yes | 開発 DB ホスト |
+| `JWT_SECRET_KEY` | Recommended | JWT 署名キー |
+| `RAILS_SECRET_KEY_BASE` | Alternative | `JWT_SECRET_KEY` 未設定時の代替 |
+| `GOOGLE_CLIENT_ID` | Feature-based | Google トークン検証 |
+| `GOOGLE_CLIENT_SECRET` | Feature-based | 運用上の Google OAuth 設定保持 |
+| `RECAPTCHA_SECRET_KEY` | Optional in development | レビュー投稿時の reCAPTCHA。production では実質必須 |
+| `FRONTEND_URL` | Optional | production CORS 設定 |
+
+デプロイ環境では上記に加えて、以下のような DB / Rails 環境変数を使う構成です。
+
+- `HEROKU_DB_DATABASE_NAME`
+- `HEROKU_DB_HOST`
+- `HEROKU_DB_USERNAME`
+- `HEROKU_DB_PASSWORD`
+- `JAWSDB_URL`
+- `RAILS_ENV`
+- `RACK_ENV`
+
+## 開発コマンド
+
+```bash
+bin/rails server
+bin/rails console
+bin/rails db:migrate
+bundle exec rspec
+bundle exec rubocop
 ```
 
-## DBのER図
-![image](https://github.com/user-attachments/assets/c3adcf4f-ba11-4a1e-a747-ce269bdc689e)
+## 重要な業務ルール
 
+- 同一ログインユーザーは同じ授業に複数レビューを投稿できません。
+- 同一ユーザーは同じレビューに複数回ありがとうできません。
+- 自分のレビューにはありがとうできません。
+- レビュー閲覧可否は `ReviewPeriod` とユーザーの投稿実績で判定します。
+- 一部 API は未認証アクセスを許可していても、認証有無でレスポンス内容が変わります。
 
-# 開発以外の活動
-* X（旧Twitter）でのSNS運用
-* 大学でのビラ配り
-* 履修登録相談会などのイベントへの参加
+## テストと CI
 
-# 開発者
-<a href="https://github.com/yu-yaba"><img width="50" src="https://avatars.githubusercontent.com/u/109569162?v=4" css></a>
+ローカルでは最低限以下を実行してください。
+
+```bash
+bundle exec rspec
+bundle exec rubocop
+```
+
+GitHub Actions では以下を実行しています。
+
+- RSpec
+- RuboCop
+
+Workflow: `.github/workflows/rubyonrails.yml`
+
+## 関連リポジトリ
+
+- Frontend: `https://github.com/yu-yaba/gatareview-front`
+- Backend: `https://github.com/yu-yaba/gatareview-back`
