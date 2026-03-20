@@ -161,6 +161,58 @@ bin/rails lectures:export_csv YEAR=2026
 bin/rails lectures:export_csv YEAR=2026 OUTPUT_DIR=/path/to/output
 ```
 
+## 授業 CSV の手動投入
+
+`db:seed` は本番講義データの投入には使いません。対象 CSV を明示指定して取り込みます。
+
+```bash
+bin/rails lectures:import_csv CSV_PATH=lectureData_2026.csv
+```
+
+絶対パスを使う場合:
+
+```bash
+bin/rails lectures:import_csv CSV_PATH=/path/to/lectureData_2026.csv
+```
+
+## 件数確認
+
+投入前後の確認には以下を使います。
+
+全件数と faculty 別件数:
+
+```bash
+bin/rails lectures:count
+```
+
+特定 faculty の件数:
+
+```bash
+bin/rails lectures:count FACULTY='E:経済科学部'
+```
+
+## Heroku での本番投入手順
+
+1. `main` にマージして Heroku へ deploy する
+2. deploy 後に投入前件数を確認する
+3. CSV を明示指定して手動 import する
+4. 投入後件数を再確認する
+
+例:
+
+```bash
+heroku run bin/rails lectures:count -a <APP_NAME>
+heroku run bin/rails lectures:count FACULTY='E:経済科学部' -a <APP_NAME>
+heroku run bin/rails lectures:import_csv CSV_PATH=lectureData_2026.csv -a <APP_NAME>
+heroku run bin/rails lectures:count -a <APP_NAME>
+heroku run bin/rails lectures:count FACULTY='E:経済科学部' -a <APP_NAME>
+```
+
+補足:
+
+- `db:seed` は production では講義データを投入しません
+- 開発用のテスト講義は production では作成されません
+
 ## 運用ドキュメント
 
 - [`docs/annual-lecture-import-plan.md`](./docs/annual-lecture-import-plan.md)

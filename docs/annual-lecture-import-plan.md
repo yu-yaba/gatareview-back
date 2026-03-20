@@ -13,7 +13,7 @@
   - 遷移先: `https://syllabus.niigata-u.ac.jp/`
 - `campussquare.do?_flowExecutionKey=...` の URL はセッション依存のため、手順書やブックマークには残さない
 - 取込用 CSV は backend 直下に配置する
-- 現行 seed は `lectureData_2025.csv` を読み込む
+- 講義データ投入は `db:seed` ではなく `bin/rails lectures:import_csv CSV_PATH=...` を使う
 - CSV のフォーマットはヘッダーなし 3 列
   - `授業名,担当教員名,学部ラベル`
 
@@ -59,9 +59,10 @@
 4. 検索結果から `授業名` と `担当教員名` を取得し、対応する `faculty` 値を付与して一覧化する
 5. すべての対象学部の結果を 1 つの CSV にまとめる
 6. `gatareview-back/lectureData_<年度>.csv` を作成する
-7. `db/seeds.rb` の読込対象ファイル名を必要に応じて対象年度へ合わせる
-8. `rails db:seed` を実行して取り込む
-9. 管理画面または API / 画面から登録結果を spot check する
+7. deploy 前に件数確認コマンドを実行して現在件数を控える
+8. Heroku deploy 後に `bin/rails lectures:import_csv CSV_PATH=lectureData_<年度>.csv` を手動実行して取り込む
+9. 再度件数確認コマンドを実行する
+10. 管理画面または API / 画面から登録結果を spot check する
 
 ## 詳細手順
 
@@ -144,27 +145,43 @@
 
 注意:
 
-- 現行実装は `db/seeds.rb` で `lectureData_2025.csv` を固定参照している
-- 年度を更新するたびに、対象ファイル名の更新または運用ルールの統一が必要
-
-### 6. seed を実行する
+- import 時は対象ファイル名を `CSV_PATH` で明示指定する
+- 年度を更新しても rake task 側のコード変更は不要
+### 6. deploy 前後で件数確認する
 
 workspace ルートで以下を実行する。
 
 ```bash
-docker-compose run --rm gatareview-back bin/rails db:seed
+docker-compose run --rm gatareview-back bin/rails lectures:count
+docker-compose run --rm gatareview-back bin/rails lectures:count FACULTY='E:経済科学部'
 ```
 
 ローカルで直接 Rails を実行する場合:
 
 ```bash
 cd gatareview-back
-bin/rails db:seed
+bin/rails lectures:count
+bin/rails lectures:count FACULTY='E:経済科学部'
+```
+
+Heroku では以下を実行する。
+
+```bash
+heroku run bin/rails lectures:count -a <APP_NAME>
+heroku run bin/rails lectures:count FACULTY='E:経済科学部' -a <APP_NAME>
+```
+
+### 7. 本番へ手動 import する
+
+Heroku deploy 完了後、対象 CSV を明示指定して import する。
+
+```bash
+heroku run bin/rails lectures:import_csv CSV_PATH=lectureData_2026.csv -a <APP_NAME>
 ```
 
 ## 確認項目
 
-seed 実行前:
+import 実行前:
 
 - 対象年度が正しい
 - 対象学部がすべて入っている
@@ -172,7 +189,7 @@ seed 実行前:
 - `faculty` がガタレビュ側の値になっている
 - 文字化けや空行がない
 
-seed 実行後:
+import 実行後:
 
 - エラーなく完了している
 - 想定件数の授業が追加されている
@@ -192,27 +209,18 @@ seed 実行後:
 
 ### 2. seed の挙動
 
-現行の `db/seeds.rb` では、CSV 取込の前にテスト用講義も作成している。
+`db:seed` は開発用テスト講義だけを対象にし、本番講義データ投入には使わない。
 
-本番データ投入でも同じ seed を使う場合は、以下を事前に確認する。
-
-- テスト用講義を本番に入れてよいか
-- 年次授業追加用 seed と開発用 seed を分けるべきか
+production では `db:seed` を実行しても講義 CSV は取り込まれない。
 
 ### 3. ファイル命名
 
-backend 直下には `lectureData.csv` と `lectureData_2025.csv` が共存している。
+backend 直下には `lectureData_<年度>.csv` を置く。
 
-運用上は以下のどちらかに統一するのが望ましい。
-
-- 毎年 `lectureData_<年度>.csv` を増やす
-- 常に最新だけを `lectureData.csv` として扱う
-
-現行コードは前者とも後者とも揃っていないため、年次更新時に必ず確認する。
+import task は `CSV_PATH` を明示指定するため、対象年次ファイルをそのまま使える。
 
 ## 改善候補
 
 - シラバス検索結果から CSV を整形する補助スクリプトを作る
-- `db/seeds.rb` の対象ファイル名を引数または環境変数で切り替えられるようにする
-- 年次授業追加用の専用 rake task を用意する
-- テスト用講義作成と本番用 CSV インポートを分離する
+- lecture import の dry-run モードを用意する
+- faculty ごとの差分レポートを出せるようにする
