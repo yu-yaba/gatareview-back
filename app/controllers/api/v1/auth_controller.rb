@@ -34,7 +34,8 @@ class Api::V1::AuthController < ApplicationController
               id: user.id,
               email: user.email,
               name: user.name,
-              avatar_url: user.avatar_url
+              avatar_url: user.avatar_url,
+              admin: user.admin?
             }
           }, status: :ok
         else
@@ -63,7 +64,8 @@ class Api::V1::AuthController < ApplicationController
           email: current_user.email,
           name: current_user.name,
           avatar_url: current_user.avatar_url,
-          reviews_count: current_user.reviews_count
+          reviews_count: current_user.reviews_count,
+          admin: current_user.admin?
         }
       }, status: :ok
     else
