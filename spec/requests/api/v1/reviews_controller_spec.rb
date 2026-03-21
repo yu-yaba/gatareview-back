@@ -26,6 +26,20 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
         expect(json['reviews'][0]['content']).to eq(first_content)
         expect(json['reviews'][1]['content']).to eq(second_content)
       end
+
+      it 'site_settings レコードがなくても制限 OFF 扱いで返すこと' do
+        expect(SiteSetting.count).to eq(0)
+
+        get "/api/v1/lectures/#{lecture.id}/reviews"
+
+        expect(response).to have_http_status(:success)
+        json = JSON.parse(response.body)
+
+        expect(json['access']).to eq(
+          'restriction_enabled' => false,
+          'access_granted' => true
+        )
+      end
     end
 
     context 'レビュー閲覧制限が有効な場合' do
@@ -111,8 +125,38 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
     end
   end
 
+  describe 'GET /api/v1/reviews/latest' do
+    let!(:lecture) { FactoryBot.create(:lecture, title: '最新レビュー確認授業', lecturer: '最新レビュー教員') }
+    let!(:restricted_setting) { FactoryBot.create(:site_setting, lecture_review_restriction_enabled: true) }
+    let!(:older_review) do
+      FactoryBot.create(:review, lecture: lecture,
+                                  content: '最新レビューAPIでは制限ONでも全文が返ることを確認するためのレビューです。',
+                                  created_at: 2.days.ago)
+    end
+    let!(:latest_review) do
+      FactoryBot.create(:review, lecture: lecture,
+                                  content: '最新レビューAPIの最新レビュー本文です。こちらも全文返却される必要があります。',
+                                  created_at: 1.day.ago)
+    end
+
+    it 'レビュー閲覧制限 ON でも全文を返すこと' do
+      get '/api/v1/reviews/latest'
+
+      expect(response).to have_http_status(:success)
+      json = JSON.parse(response.body)
+
+      expect(json.length).to eq(2)
+      expect(json[0]['content']).to eq(latest_review.content)
+      expect(json[1]['content']).to eq(older_review.content)
+      expect(json[0]['lecture']).to include(
+        'id' => lecture.id,
+        'title' => '最新レビュー確認授業',
+        'lecturer' => '最新レビュー教員'
+      )
+    end
+  end
+
   describe 'DELETE /api/v1/reviews/:id' do
-    let!(:site_setting) { FactoryBot.create(:site_setting, lecture_review_restriction_enabled: true) }
     let!(:target_lecture) { FactoryBot.create(:lecture) }
     let!(:first_review) do
       FactoryBot.create(:review, lecture: target_lecture,
@@ -132,32 +176,68 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
       allow(AuthorizeApiRequest).to receive(:call).and_return({ result: user })
     end
 
-    it '最後のレビューを削除すると再度制限対象になること' do
-      get "/api/v1/lectures/#{target_lecture.id}/reviews"
+    context 'レビュー閲覧制限が有効な場合' do
+      let!(:site_setting) { FactoryBot.create(:site_setting, lecture_review_restriction_enabled: true) }
 
-      expect(response).to have_http_status(:success)
-      json = JSON.parse(response.body)
-      expect(user.reload.reviews_count).to eq(1)
-      expect(json['access']).to eq(
-        'restriction_enabled' => true,
-        'access_granted' => true
-      )
+      it '最後のレビューを削除すると再度制限対象になること' do
+        get "/api/v1/lectures/#{target_lecture.id}/reviews"
 
-      delete "/api/v1/reviews/#{owned_review.id}"
+        expect(response).to have_http_status(:success)
+        json = JSON.parse(response.body)
+        expect(user.reload.reviews_count).to eq(1)
+        expect(json['access']).to eq(
+          'restriction_enabled' => true,
+          'access_granted' => true
+        )
 
-      expect(response).to have_http_status(:success)
-      expect(user.reload.reviews_count).to eq(0)
+        delete "/api/v1/reviews/#{owned_review.id}"
 
-      get "/api/v1/lectures/#{target_lecture.id}/reviews"
+        expect(response).to have_http_status(:success)
+        expect(user.reload.reviews_count).to eq(0)
 
-      expect(response).to have_http_status(:success)
-      json = JSON.parse(response.body)
-      expect(json['access']).to eq(
-        'restriction_enabled' => true,
-        'access_granted' => false
-      )
-      expect(json['reviews'][0]['content']).to eq('先頭レビューの本文です。全文表示されることを確認するために長めにしています。')
-      expect(json['reviews'][1]['content']).to eq('二件目レビューの本文です。ロック時はマスクされることを確認するために長めにしています。'[0, 30])
+        get "/api/v1/lectures/#{target_lecture.id}/reviews"
+
+        expect(response).to have_http_status(:success)
+        json = JSON.parse(response.body)
+        expect(json['access']).to eq(
+          'restriction_enabled' => true,
+          'access_granted' => false
+        )
+        expect(json['reviews'][0]['content']).to eq('先頭レビューの本文です。全文表示されることを確認するために長めにしています。')
+        expect(json['reviews'][1]['content']).to eq('二件目レビューの本文です。ロック時はマスクされることを確認するために長めにしています。'[0, 30])
+      end
+    end
+
+    context 'レビュー閲覧制限が無効な場合' do
+      let!(:site_setting) { FactoryBot.create(:site_setting, lecture_review_restriction_enabled: false) }
+
+      it '最後のレビューを削除しても全文閲覧できること' do
+        get "/api/v1/lectures/#{target_lecture.id}/reviews"
+
+        expect(response).to have_http_status(:success)
+        json = JSON.parse(response.body)
+        expect(user.reload.reviews_count).to eq(1)
+        expect(json['access']).to eq(
+          'restriction_enabled' => false,
+          'access_granted' => true
+        )
+
+        delete "/api/v1/reviews/#{owned_review.id}"
+
+        expect(response).to have_http_status(:success)
+        expect(user.reload.reviews_count).to eq(0)
+
+        get "/api/v1/lectures/#{target_lecture.id}/reviews"
+
+        expect(response).to have_http_status(:success)
+        json = JSON.parse(response.body)
+        expect(json['access']).to eq(
+          'restriction_enabled' => false,
+          'access_granted' => true
+        )
+        expect(json['reviews'][0]['content']).to eq('先頭レビューの本文です。全文表示されることを確認するために長めにしています。')
+        expect(json['reviews'][1]['content']).to eq('二件目レビューの本文です。ロック時はマスクされることを確認するために長めにしています。')
+      end
     end
   end
 end
