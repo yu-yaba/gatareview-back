@@ -2,8 +2,8 @@
 
 FactoryBot.define do
   factory :lecture do
-    title { '数学' }
-    lecturer { '田中' }
+    sequence(:title) { |n| "数学#{n}" }
+    sequence(:lecturer) { |n| "田中#{n}" }
     faculty { '理学部' }
   end
 end
