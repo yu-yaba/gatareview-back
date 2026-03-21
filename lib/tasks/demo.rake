@@ -4,6 +4,7 @@ namespace :demo do
   desc 'review access 確認用のデモデータを投入する'
   task review_access_seed: :environment do
     ActiveRecord::Base.transaction do
+      current_year = Date.current.year.to_s
       setting = SiteSetting.current!
       setting.update!(lecture_review_restriction_enabled: false, last_updated_by: nil)
 
@@ -56,7 +57,7 @@ namespace :demo do
       Review.find_or_initialize_by(lecture: one_review_lecture, user: unlocked_user).tap do |review|
         review.rating = 5
         review.content = 'レビュー投稿済みユーザーの確認用レビューです。reviews_count が 1 以上になることを確認するための本文です。'
-        review.period_year = '2025'
+        review.period_year = current_year
         review.period_term = '1ターム'
         review.save!
       end
@@ -64,7 +65,7 @@ namespace :demo do
       Review.find_or_initialize_by(lecture: two_review_lecture, user: helper_user).tap do |review|
         review.rating = 4
         review.content = '2件授業の1件目レビューです。閲覧制限ON時でも全文表示される想定の本文です。'
-        review.period_year = '2025'
+        review.period_year = current_year
         review.period_term = '1ターム'
         review.save!
       end
@@ -72,7 +73,7 @@ namespace :demo do
       Review.find_or_initialize_by(lecture: two_review_lecture, user: admin_user).tap do |review|
         review.rating = 3
         review.content = '2件授業の2件目レビューです。閲覧制限ON時には先頭30文字だけ返ることを確認するための本文です。'
-        review.period_year = '2025'
+        review.period_year = current_year
         review.period_term = '2ターム'
         review.save!
       end

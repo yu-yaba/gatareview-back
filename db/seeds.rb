@@ -36,10 +36,19 @@ puts "テスト用講義の作成完了\n"
 require 'csv'
 require 'activerecord-import'
 
-csv_file_path = Rails.root.join('lectureData_2025.csv')
+csv_file_path = LectureDataCsvSelector.latest_path
 
 puts "Seeding lectures from #{File.basename(csv_file_path)}..."
 puts "重複する講義は無視され、既存データは削除されません。"
+
+selected_year = File.basename(csv_file_path)[/^lectureData_(\d{4})\.csv$/, 1]&.to_i
+current_year = Date.current.year
+
+if selected_year && selected_year < current_year
+  puts "警告: 現在は #{current_year} 年ですが、最新の講義CSVは #{selected_year} 年度です。#{current_year} 年度のCSV未投入の可能性があります。"
+elsif selected_year.nil? && File.basename(csv_file_path) == 'lectureData.csv'
+  puts '警告: 年度付き lectureData_YYYY.csv が見つからないため lectureData.csv を使用します。'
+end
 
 unless File.exist?(csv_file_path)
   puts "エラー: CSVファイルが見つかりません: #{csv_file_path}"
