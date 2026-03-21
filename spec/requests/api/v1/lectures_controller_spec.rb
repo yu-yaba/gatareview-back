@@ -13,21 +13,23 @@ RSpec.describe Api::V1::LecturesController, type: :request do
 
         expect(response).to have_http_status(:success)
         json = JSON.parse(response.body)
-        expect(json.first['title']).to eq(lecture.title)
-        expect(json.first['lecturer']).to eq(lecture.lecturer)
-        expect(json.first['faculty']).to eq(lecture.faculty)
-        expect(json.first['avg_rating']).to be_present
-        expect(json.first['reviews']).to be_present
+        expect(json['lectures'].first['title']).to eq(lecture.title)
+        expect(json['lectures'].first['lecturer']).to eq(lecture.lecturer)
+        expect(json['lectures'].first['faculty']).to eq(lecture.faculty)
+        expect(json['lectures'].first['avg_rating']).to be_present
+        expect(json['lectures'].first['review_count']).to eq(1)
+        expect(json['pagination']).to be_present
       end
     end
 
     context '講義が存在しない場合' do
-      it 'エラーを返すこと' do
+      it '空配列を返すこと' do
         get '/api/v1/lectures'
 
-        expect(response).to have_http_status(:bad_request)
+        expect(response).to have_http_status(:success)
         json = JSON.parse(response.body)
-        expect(json['error']).to eq('授業が見つかりません。')
+        expect(json['lectures']).to eq([])
+        expect(json['pagination']).to include('current_page' => 1, 'total_count' => 0)
       end
     end
   end
@@ -57,6 +59,7 @@ RSpec.describe Api::V1::LecturesController, type: :request do
   end
 
   describe 'POST /api/v1/lectures' do
+    let(:admin_user) { FactoryBot.create(:user, email: 'admin@example.com') }
     let(:valid_params) do
       {
         lecture: {
@@ -65,6 +68,13 @@ RSpec.describe Api::V1::LecturesController, type: :request do
           faculty: '新しい学部'
         }
       }
+    end
+
+    before do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('ADMIN_EMAILS', '').and_return('admin@example.com')
+      allow(ENV).to receive(:fetch).with('ADMIN_EMAIL', nil).and_return(nil)
+      allow(AuthorizeApiRequest).to receive(:call).and_return({ result: admin_user })
     end
 
     context '有効なパラメータの場合' do
@@ -83,7 +93,13 @@ RSpec.describe Api::V1::LecturesController, type: :request do
 
     context '無効なパラメータの場合' do
       it '講義を作成できないこと' do
-        invalid_params = { lecture: { title: '' } }
+        invalid_params = {
+          lecture: {
+            title: '',
+            lecturer: '新しい講師',
+            faculty: '新しい学部'
+          }
+        }
 
         expect do
           post '/api/v1/lectures', params: invalid_params

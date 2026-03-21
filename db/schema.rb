@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2025_08_21_074843) do
+ActiveRecord::Schema[7.0].define(version: 2026_03_21_000004) do
   create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
@@ -31,18 +31,6 @@ ActiveRecord::Schema[7.0].define(version: 2025_08_21_074843) do
     t.index ["title", "lecturer", "faculty"], name: "index_lectures_on_title_lecturer_faculty", unique: true
     t.index ["title", "lecturer"], name: "index_lectures_on_title_and_lecturer"
     t.index ["title"], name: "index_lectures_on_title"
-  end
-
-  create_table "review_periods", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
-    t.string "period_name", null: false, comment: "期間名 (例: 2025-spring)"
-    t.datetime "start_date", null: false, comment: "期間開始日"
-    t.datetime "end_date", null: false, comment: "期間終了日"
-    t.boolean "is_active", default: false, null: false, comment: "現在有効な期間かを示すフラグ"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["is_active"], name: "index_review_periods_on_is_active"
-    t.index ["period_name"], name: "index_review_periods_on_period_name", unique: true
-    t.index ["start_date", "end_date"], name: "index_review_periods_on_start_date_and_end_date"
   end
 
   create_table "reviews", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -67,6 +55,16 @@ ActiveRecord::Schema[7.0].define(version: 2025_08_21_074843) do
     t.index ["user_id"], name: "index_reviews_on_user_id"
   end
 
+  create_table "site_settings", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.boolean "lecture_review_restriction_enabled", default: false, null: false
+    t.bigint "last_updated_by_user_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "singleton_guard", default: 1, null: false
+    t.index ["last_updated_by_user_id"], name: "index_site_settings_on_last_updated_by_user_id"
+    t.index ["singleton_guard"], name: "index_site_settings_on_singleton_guard", unique: true
+  end
+
   create_table "thanks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "review_id"
@@ -75,17 +73,6 @@ ActiveRecord::Schema[7.0].define(version: 2025_08_21_074843) do
     t.index ["review_id"], name: "index_thanks_on_review_id"
     t.index ["user_id", "review_id"], name: "index_thanks_on_user_id_and_review_id", unique: true
     t.index ["user_id"], name: "index_thanks_on_user_id"
-  end
-
-  create_table "user_review_period_counts", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
-    t.bigint "user_id", null: false, comment: "ユーザーID"
-    t.bigint "review_period_id", null: false, comment: "レビュー期間ID"
-    t.integer "reviews_count", default: 0, null: false, comment: "期間内のレビュー投稿数"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["review_period_id"], name: "index_user_review_period_counts_on_review_period_id"
-    t.index ["user_id", "review_period_id"], name: "index_user_period_counts_unique", unique: true
-    t.index ["user_id"], name: "index_user_review_period_counts_on_user_id"
   end
 
   create_table "users", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -104,8 +91,7 @@ ActiveRecord::Schema[7.0].define(version: 2025_08_21_074843) do
   add_foreign_key "bookmarks", "lectures"
   add_foreign_key "bookmarks", "users"
   add_foreign_key "reviews", "users"
+  add_foreign_key "site_settings", "users", column: "last_updated_by_user_id"
   add_foreign_key "thanks", "reviews"
   add_foreign_key "thanks", "users"
-  add_foreign_key "user_review_period_counts", "review_periods"
-  add_foreign_key "user_review_period_counts", "users"
 end

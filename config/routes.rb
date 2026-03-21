@@ -27,18 +27,11 @@ Rails.application.routes.draw do
       end
       get '/reviews/total', to: 'reviews#total'
       get '/reviews/latest', to: 'reviews#latest'
-      
-      # レビュー期間管理
-      resources :review_periods do
-        member do
-          patch :activate
-          patch :deactivate
-        end
-        collection do
-          get :current
-        end
+
+      namespace :admin do
+        resource :review_access, only: %i[show update], path: 'review-access', controller: :review_access
       end
-      
+
       # マイページ
       get '/mypage', to: 'mypage#show'
       get '/mypage/reviews', to: 'mypage#reviews'

@@ -20,15 +20,10 @@ module Api
         @review.user = current_user if current_user
         
         if @review.save
-          # レビュー投稿成功時、期間別レビュー数を更新（ログインユーザーの場合のみ）
-          if current_user
-            current_user.increment_period_review_count!
-          end
-          
           review_data = @review.as_json(include: { user: { only: %i[id name avatar_url] } })
           review_data['user_id'] = @review.user_id
-          render json: { 
-            success: true, 
+          render json: {
+            success: true,
             review: review_data
           }, status: :created
         else
@@ -38,17 +33,15 @@ module Api
 
       def index
         reviews = @lecture.reviews.includes(:user, :thanks).order(created_at: :asc)
-
-        access_granted = has_review_access?
+        access = review_access_state
 
         reviews_json = reviews.each_with_index.map do |review, index|
           review_data = review.as_json
           review_data['user_id'] = review.user_id
           review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
           review_data['thanks_count'] = review.thanks.count
-          review_data['access_granted'] = access_granted
 
-          unless access_granted
+          unless access[:access_granted]
             # 権限がない場合でも、最初に投稿されたレビュー（一覧の先頭）は全文表示する
             unless index.zero?
               # それ以外のコメントは先頭30文字のみ返す（フロントでぼかし表示）
@@ -59,7 +52,10 @@ module Api
           review_data
         end
 
-        render json: reviews_json
+        render json: {
+          reviews: reviews_json,
+          access: access
+        }
       end
 
       def total
@@ -98,8 +94,6 @@ module Api
         end
         
         if @review.destroy
-          # レビュー削除時、期間別レビュー数を減少
-          current_user.decrement_period_review_count!
           render json: { success: true, message: 'レビューを削除しました' }
         else
           render json: { success: false, message: 'レビューの削除に失敗しました' }, status: :unprocessable_entity
@@ -151,27 +145,23 @@ module Api
         verifier.verify
       end
 
-      # レビュー閲覧権限をチェック（期間ベース対応）
+      # レビュー閲覧権限をチェック
       def has_review_access?
+        return true unless review_restriction_enabled?
         return false unless current_user
-        
-        # 現在の期間を取得
-        current_period = ReviewPeriod.current_period
-        if current_period
-          # 期間ベースの権限チェック
-          period_reviews_count = current_user.reviews_count_for_period(current_period)
-          
-          if period_reviews_count >= 1
-            return true
-          end
-        else
-          # 期間が設定されていない場合は従来の全体レビュー数ベースで判定
-          if current_user.reviews_count >= 1
-            return true
-          end
-        end
-        
-        false
+
+        current_user.reviews_count >= 1
+      end
+
+      def review_access_state
+        {
+          restriction_enabled: review_restriction_enabled?,
+          access_granted: has_review_access?
+        }
+      end
+
+      def review_restriction_enabled?
+        SiteSetting.current.lecture_review_restriction_enabled
       end
 
       # レビューコンテンツを部分的にマスク
