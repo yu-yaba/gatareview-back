@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "[verify] Running RuboCop"
+bundle exec rubocop
+
+echo "[verify] Running RSpec"
+bundle exec rspec

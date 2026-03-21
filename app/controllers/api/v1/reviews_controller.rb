@@ -162,6 +162,9 @@ module Api
 
       def review_restriction_enabled?
         SiteSetting.current.lecture_review_restriction_enabled
+      rescue ActiveRecord::StatementInvalid => e
+        Rails.logger.error("Failed to load review restriction setting: #{e.class} #{e.message}")
+        false
       end
 
       # レビューコンテンツを部分的にマスク

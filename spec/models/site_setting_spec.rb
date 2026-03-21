@@ -11,6 +11,16 @@ RSpec.describe SiteSetting, type: :model do
       expect(setting.id).to eq(1)
       expect(setting.lecture_review_restriction_enabled).to eq(false)
     end
+
+    it 'site_settings テーブルが未作成でも制限OFFの新規設定を返すこと' do
+      allow(described_class).to receive(:table_ready?).and_return(false)
+
+      setting = described_class.current
+
+      expect(setting).to be_new_record
+      expect(setting.id).to eq(1)
+      expect(setting.lecture_review_restriction_enabled).to eq(false)
+    end
   end
 
   describe '.current!' do

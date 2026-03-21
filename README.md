@@ -63,8 +63,11 @@ spec/factories/           Factory Bot
 - Ruby 3.2.2
 - Bundler
 - MySQL 8 系を推奨
+- 実運用と同じ確認をしたい場合は Docker 実行を推奨
 
 ## セットアップ
+
+チームの標準導線は Docker です。ローカル Ruby 直実行も可能ですが、検証は Docker を正とします。
 
 1. 依存関係をインストール
 
@@ -114,18 +117,19 @@ http://localhost:3000
 
 ## 環境変数
 
-| 変数名 | 必須 | 用途 |
-| --- | --- | --- |
-| `MYSQL_DATABASE` | Yes | 開発 DB 名 |
-| `MYSQL_USER` | Yes | 開発 DB ユーザー |
-| `MYSQL_PASSWORD` | Yes | 開発 DB パスワード |
-| `MYSQL_HOST` | Yes | 開発 DB ホスト |
-| `JWT_SECRET_KEY` | Recommended | JWT 署名キー |
-| `RAILS_SECRET_KEY_BASE` | Alternative | `JWT_SECRET_KEY` 未設定時の代替 |
-| `GOOGLE_CLIENT_ID` | Feature-based | Google トークン検証 |
-| `GOOGLE_CLIENT_SECRET` | Feature-based | 運用上の Google OAuth 設定保持 |
-| `RECAPTCHA_SECRET_KEY` | Optional in development | レビュー投稿時の reCAPTCHA。production では実質必須 |
-| `FRONTEND_URL` | Optional | production CORS 設定 |
+| 変数名 | 必須 | 用途 | 本番例 |
+| --- | --- | --- | --- |
+| `MYSQL_DATABASE` | Yes | 開発 DB 名 | Heroku アドオン値 |
+| `MYSQL_USER` | Yes | 開発 DB ユーザー | Heroku アドオン値 |
+| `MYSQL_PASSWORD` | Yes | 開発 DB パスワード | Heroku アドオン値 |
+| `MYSQL_HOST` | Yes | 開発 DB ホスト | Heroku アドオン値 |
+| `JWT_SECRET_KEY` | Recommended | JWT 署名キー | ランダムな長い文字列 |
+| `RAILS_SECRET_KEY_BASE` | Alternative | `JWT_SECRET_KEY` 未設定時の代替 | Rails secret |
+| `GOOGLE_CLIENT_ID` | Feature-based | Google トークン検証 | Google Cloud Console の値 |
+| `GOOGLE_CLIENT_SECRET` | Feature-based | 運用上の Google OAuth 設定保持 | Google Cloud Console の値 |
+| `RECAPTCHA_SECRET_KEY` | Optional in development | レビュー投稿時の reCAPTCHA。production では実質必須 | reCAPTCHA secret |
+| `FRONTEND_URL` | Optional | production CORS 設定 | `https://www.gatareview.com` |
+| `ADMIN_EMAILS` | Feature-based | 管理画面へ入れるメールアドレス | `admin@example.com,ops@example.com` |
 
 デプロイ環境では上記に加えて、以下のような DB / Rails 環境変数を使う構成です。
 
@@ -137,6 +141,8 @@ http://localhost:3000
 - `RAILS_ENV`
 - `RACK_ENV`
 
+`site_settings` は環境変数ではなく DB テーブルです。review access を本番で使う場合は env 追加とは別に migration 実行が必要です。
+
 ## 開発コマンド
 
 ```bash
@@ -145,6 +151,14 @@ bin/rails console
 bin/rails db:migrate
 bundle exec rspec
 bundle exec rubocop
+bin/verify
+```
+
+Docker 前提の確認導線:
+
+```bash
+docker compose run --rm gatareview-back bin/rails db:migrate
+docker compose run --rm gatareview-back bin/verify
 ```
 
 ## 授業 CSV 自動生成
@@ -230,8 +244,7 @@ heroku run bin/rails lectures:count FACULTY='E:経済科学部' -a <APP_NAME>
 ローカルでは最低限以下を実行してください。
 
 ```bash
-bundle exec rspec
-bundle exec rubocop
+bin/verify
 ```
 
 GitHub Actions では以下を実行しています。
@@ -240,6 +253,29 @@ GitHub Actions では以下を実行しています。
 - RuboCop
 
 Workflow: `.github/workflows/rubyonrails.yml`
+
+## デモデータ
+
+review access の確認用データは以下で投入できます。
+
+```bash
+docker compose run --rm gatareview-back bin/rails demo:review_access_seed
+```
+
+投入されるもの:
+
+- review access 用 `SiteSetting`
+- レビュー 0 件 / 1 件 / 2 件の授業
+- `reviews_count = 0` のユーザー
+- `reviews_count >= 1` のユーザー
+- 任意で管理者として使えるダミーユーザー
+
+実際の管理画面ログインは `ADMIN_EMAILS` に設定した実メールアドレスで行ってください。
+
+## デプロイ前確認
+
+Heroku 反映前の確認手順は [`docs/deploy-checklist.md`](./docs/deploy-checklist.md) にまとめています。  
+review access の変更では `ADMIN_EMAILS` 追加と `db:migrate` の両方を忘れないでください。
 
 ## 関連リポジトリ
 
