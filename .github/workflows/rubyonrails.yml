@@ -13,6 +13,12 @@ jobs:
           - "3306:3306"
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=30s
           
     env:
       RAILS_ENV: test
