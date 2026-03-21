@@ -49,8 +49,9 @@ namespace :lectures do
       puts "#{ENV['FACULTY']}: #{Lecture.where(faculty: ENV['FACULTY']).count}"
     else
       puts "Total lectures: #{Lecture.count}"
-      Lecture.group(:faculty).count.sort.each do |faculty, count|
-        puts "#{faculty}: #{count}"
+      Lecture.group(:faculty).count.sort_by { |faculty, _| faculty.to_s }.each do |faculty, count|
+        label = faculty.presence || '(blank faculty)'
+        puts "#{label}: #{count}"
       end
     end
   end
