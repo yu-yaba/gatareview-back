@@ -1,6 +1,8 @@
 inherit_from: .rubocop_todo.yml
 
 AllCops:
+  NewCops: disable
+  SuggestExtensions: false
   Exclude:
     - 'bin/**/*'
     - 'db/**/*'
@@ -9,5 +11,5 @@ AllCops:
     - 'tmp/**/*'
     - 'test/**/*'
 
-Documentation:
+Style/Documentation:
   Enabled: false

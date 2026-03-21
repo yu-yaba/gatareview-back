@@ -29,7 +29,7 @@
 ```bash
 bundle install
 bin/rails db:migrate
-bundle exec rspec
+bin/verify
 bin/rails console
 ```
 
@@ -37,7 +37,7 @@ bin/rails console
 
 ```bash
 docker-compose run --rm gatareview-back bin/rails db:migrate
-docker-compose run --rm gatareview-back bundle exec rspec
+docker-compose run --rm gatareview-back bin/verify
 docker-compose exec gatareview-back bin/rails console
 ```
 
@@ -54,8 +54,10 @@ docker-compose exec gatareview-back bin/rails console
 - レビュー閲覧制御を変更する場合は、以下をまとめて確認してください。
   - `app/controllers/api/v1/reviews_controller.rb`
   - `app/models/user.rb`
-  - `app/models/review_period.rb`
-  - `app/models/user_review_period_count.rb`
+  - `app/models/site_setting.rb`
+  - `app/controllers/api/v1/admin/review_access_controller.rb`
+- 授業詳細レビューの閲覧可否は `SiteSetting` と `reviews_count` で決まります。lecture detail が production で 500 のときは `site_settings` migration 未実行を先に疑ってください。
+- 管理者判定は `User#admin?` と `ADMIN_EMAILS` / `ADMIN_EMAIL` の環境変数で行います。
 - N+1 回避を優先してください。`includes`, `joins`, `left_joins`, `group` を意図的に使っている箇所が多いです。
 
 ## 既存の業務制約
@@ -76,7 +78,7 @@ docker-compose exec gatareview-back bin/rails console
 
 ## 変更時の検証
 
-- 変更後は最低限 `bundle exec rspec` を実行してください。
+- 変更後は最低限 `bin/verify` を実行してください。
 - 以下を触った場合は request spec の追加または更新を優先してください。
   - ルーティング
   - 認証
@@ -84,10 +86,11 @@ docker-compose exec gatareview-back bin/rails console
   - ブックマーク
   - ありがとう
   - マイページ API
-  - レビュー期間
+  - review access
 - マイグレーションを追加した場合:
   - `db/schema.rb` が期待通りか確認
   - 既存データに対する互換性を確認
+- review access の確認データが必要なら `bin/rails demo:review_access_seed` を使ってください。
 
 ## セキュリティ
 
