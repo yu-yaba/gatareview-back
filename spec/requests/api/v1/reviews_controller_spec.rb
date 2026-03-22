@@ -18,11 +18,15 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
         expect(response).to have_http_status(:success)
         json = JSON.parse(response.body)
 
-        expect(json.length).to eq(2)
-        expect(json[0]['access_granted']).to eq(false)
-        expect(json[0]['content']).to eq(first_content)
-        expect(json[1]['access_granted']).to eq(false)
-        expect(json[1]['content']).to eq(second_content[0, 30])
+        expect(json['access']).to eq(
+          'restriction_enabled' => true,
+          'access_granted' => false
+        )
+        expect(json['reviews'].length).to eq(2)
+        expect(json['reviews'][0]['access_granted']).to eq(false)
+        expect(json['reviews'][0]['content']).to eq(first_content)
+        expect(json['reviews'][1]['access_granted']).to eq(false)
+        expect(json['reviews'][1]['content']).to eq(second_content[0, 30])
       end
     end
 
@@ -40,11 +44,15 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
         expect(response).to have_http_status(:success)
         json = JSON.parse(response.body)
 
-        expect(json.length).to eq(2)
-        expect(json[0]['access_granted']).to eq(true)
-        expect(json[0]['content']).to eq(first_content)
-        expect(json[1]['access_granted']).to eq(true)
-        expect(json[1]['content']).to eq(second_content)
+        expect(json['access']).to eq(
+          'restriction_enabled' => true,
+          'access_granted' => true
+        )
+        expect(json['reviews'].length).to eq(2)
+        expect(json['reviews'][0]['access_granted']).to eq(true)
+        expect(json['reviews'][0]['content']).to eq(first_content)
+        expect(json['reviews'][1]['access_granted']).to eq(true)
+        expect(json['reviews'][1]['content']).to eq(second_content)
       end
     end
   end

@@ -40,6 +40,10 @@ module Api
         reviews = @lecture.reviews.includes(:user, :thanks).order(created_at: :asc)
 
         access_granted = has_review_access?
+        access = {
+          restriction_enabled: true,
+          access_granted: access_granted
+        }
 
         reviews_json = reviews.each_with_index.map do |review, index|
           review_data = review.as_json
@@ -59,7 +63,10 @@ module Api
           review_data
         end
 
-        render json: reviews_json
+        render json: {
+          reviews: reviews_json,
+          access: access
+        }
       end
 
       def total
