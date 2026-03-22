@@ -129,6 +129,7 @@ http://localhost:3000
 
 デプロイ環境では上記に加えて、以下のような DB / Rails 環境変数を使う構成です。
 
+- `DATABASE_URL`（production で最優先）
 - `HEROKU_DB_DATABASE_NAME`
 - `HEROKU_DB_HOST`
 - `HEROKU_DB_USERNAME`
@@ -137,6 +138,11 @@ http://localhost:3000
 - `RAILS_ENV`
 - `RACK_ENV`
 
+production では `DATABASE_URL` が設定されていればそれを優先し、未設定なら `JAWSDB_URL` を使います。外部 MySQL へ移行するときは `DATABASE_URL` を追加し、既存 `JAWSDB_URL` はロールバック用に残す運用を想定しています。
+
+`site_settings` は環境変数ではなく DB テーブルです。review access を本番で使う場合は env 追加とは別に migration 実行が必要です。
+
+JawsDB から Aiven for MySQL へ切り替えるときの実行手順は [docs/aiven-migration-runbook.md](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/aiven-migration-runbook.md) を参照してください。
 ## 開発コマンド
 
 ```bash
