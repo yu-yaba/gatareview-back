@@ -4,6 +4,7 @@
 
 - `gatareview-back` の Heroku デプロイ
 - review access、認証、CORS、reCAPTCHA、レスポンス契約の変更
+- DB 接続先の切替
 
 ## 事前確認
 
@@ -18,11 +19,14 @@
 | 変数名 | 必須 | 確認内容 |
 | --- | --- | --- |
 | `JWT_SECRET_KEY` | Recommended | 空でない。未設定時は `RAILS_SECRET_KEY_BASE` を使うが専用キー推奨 |
+| `DATABASE_URL` | Optional | 外部 DB を使う場合の接続先。設定時は `JAWSDB_URL` より優先される |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google ログインの token 検証値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |
 | `RECAPTCHA_SECRET_KEY` | Feature-based | 本番レビュー投稿で必要 |
 | `FRONTEND_URL` | Recommended | `https://www.gatareview.com` |
 | `ADMIN_EMAILS` | Feature-based | `/admin/review-access` に入るメールアドレス |
+
+DB 移行を伴う切替は [aiven-migration-runbook.md](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/aiven-migration-runbook.md) の手順に従う。
 
 ## migration
 
