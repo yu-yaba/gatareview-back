@@ -27,6 +27,19 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
         expect(json['reviews'][1]['content']).to eq(second_content)
       end
 
+      it 'thanks_count を counter cache から返すこと' do
+        Thank.create!(user: FactoryBot.create(:user), review: second_review)
+
+        get "/api/v1/lectures/#{lecture.id}/reviews"
+
+        expect(response).to have_http_status(:success)
+        json = JSON.parse(response.body)
+
+        expect(second_review.reload.thanks_count).to eq(1)
+        expect(json['reviews'][0]['thanks_count']).to eq(0)
+        expect(json['reviews'][1]['thanks_count']).to eq(1)
+      end
+
       it 'site_settings レコードがなくても制限 OFF 扱いで返すこと' do
         expect(SiteSetting.count).to eq(0)
 

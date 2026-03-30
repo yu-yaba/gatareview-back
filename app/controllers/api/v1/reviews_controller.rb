@@ -32,14 +32,14 @@ module Api
       end
 
       def index
-        reviews = @lecture.reviews.includes(:user, :thanks).order(created_at: :asc)
+        reviews = @lecture.reviews.includes(:user).order(created_at: :asc)
         access = review_access_state
 
         reviews_json = reviews.each_with_index.map do |review, index|
           review_data = review.as_json
           review_data['user_id'] = review.user_id
           review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
-          review_data['thanks_count'] = review.thanks.count
+          review_data['thanks_count'] = review.thanks_count || 0
 
           unless access[:access_granted]
             # 権限がない場合でも、最初に投稿されたレビュー（一覧の先頭）は全文表示する
