@@ -134,15 +134,10 @@ http://localhost:3000
 デプロイ環境では上記に加えて、以下のような DB / Rails 環境変数を使う構成です。
 
 - `DATABASE_URL`（production で最優先）
-- `HEROKU_DB_DATABASE_NAME`
-- `HEROKU_DB_HOST`
-- `HEROKU_DB_USERNAME`
-- `HEROKU_DB_PASSWORD`
-- `JAWSDB_URL`
 - `RAILS_ENV`
 - `RACK_ENV`
 
-production では `DATABASE_URL` が設定されていればそれを優先し、未設定なら `JAWSDB_URL` を使います。外部 MySQL へ移行するときは `DATABASE_URL` を追加し、既存 `JAWSDB_URL` はロールバック用に残す運用を想定しています。
+production では `DATABASE_URL` を唯一の DB 接続設定として使います。`JAWSDB_URL` や `HEROKU_DB_*` のような旧設定は参照しません。
 
 `site_settings` は環境変数ではなく DB テーブルです。review access を本番で使う場合は env 追加とは別に migration 実行が必要です。
 
