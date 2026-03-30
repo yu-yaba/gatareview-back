@@ -58,6 +58,26 @@ RSpec.describe Api::V1::LecturesController, type: :request do
     end
   end
 
+  describe 'GET /api/v1/lectures/no_reviews' do
+    let!(:lectures_without_reviews) { FactoryBot.create_list(:lecture, 6) }
+    let!(:reviewed_lecture) { FactoryBot.create(:lecture) }
+    let!(:review) { FactoryBot.create(:review, lecture: reviewed_lecture) }
+
+    it 'レビュー未投稿の講義のみを軽量ランダムで返すこと' do
+      allow(SecureRandom).to receive(:random_number).with(3).and_return(1)
+
+      get '/api/v1/lectures/no_reviews'
+
+      expect(response).to have_http_status(:success)
+
+      json = JSON.parse(response.body)
+      lecture_ids = json.fetch('lectures').map { |lecture_json| lecture_json.fetch('id') }
+
+      expect(lecture_ids).to eq(lectures_without_reviews.map(&:id)[1, 4])
+      expect(lecture_ids).not_to include(reviewed_lecture.id)
+    end
+  end
+
   describe 'POST /api/v1/lectures' do
     let(:admin_user) { FactoryBot.create(:user, email: 'admin@example.com') }
     let(:valid_params) do

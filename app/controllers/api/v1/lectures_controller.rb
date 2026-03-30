@@ -133,11 +133,17 @@ module Api
       end
 
       def no_reviews
-        # レビューがない講義をランダムに4件取得
-        @lectures = Lecture.left_joins(:reviews)
-                          .where(reviews: { id: nil })
-                          .order('RAND()')
-                          .limit(4)
+        lectures_without_reviews = Lecture.left_joins(:reviews)
+                                          .where(reviews: { id: nil })
+
+        limit = 4
+        lectures_count = lectures_without_reviews.count
+        max_offset = [lectures_count - limit, 0].max
+        offset = max_offset.positive? ? SecureRandom.random_number(max_offset + 1) : 0
+
+        @lectures = lectures_without_reviews.order(:id)
+                                            .offset(offset)
+                                            .limit(limit)
 
         if @lectures.any?
           lectures_json = Lecture.as_json_reviews(@lectures)
