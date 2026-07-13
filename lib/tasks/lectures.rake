@@ -34,6 +34,9 @@ namespace :lectures do
     puts "Lecture count after: #{result.lecture_count_after}"
     puts "Rows inserted: #{result.inserted_count}"
     puts "Rows ignored (existing or duplicate): #{result.ignored_count}"
+    puts "Matched existing lectures: #{result.matched_existing_lecture_count}"
+    puts "Offerings imported: #{result.offering_count}"
+    puts "Slots imported: #{result.slot_count}"
     result.faculty_counts.each do |faculty, count|
       puts "#{faculty}: #{count}"
     end
@@ -53,6 +56,18 @@ namespace :lectures do
         label = faculty.presence || '(blank faculty)'
         puts "#{label}: #{count}"
       end
+    end
+  end
+
+  desc 'Show yearly lecture offering and slot counts'
+  task offerings_count: :environment do
+    LectureOffering.group(:year).order(:year).count.each do |year, offering_count|
+      offering_ids = LectureOffering.where(year: year).select(:id)
+      slot_count = OfferingSlot.where(lecture_offering_id: offering_ids).count
+      without_slots_count = LectureOffering.where(year: year)
+                                           .where.not(id: OfferingSlot.select(:lecture_offering_id))
+                                           .count
+      puts "#{year}: offerings=#{offering_count}, slots=#{slot_count}, offerings_without_slots=#{without_slots_count}"
     end
   end
 end

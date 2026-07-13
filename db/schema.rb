@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_03_21_000004) do
+ActiveRecord::Schema[7.0].define(version: 2026_07_13_000002) do
   create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
@@ -31,6 +31,32 @@ ActiveRecord::Schema[7.0].define(version: 2026_03_21_000004) do
     t.index ["title", "lecturer", "faculty"], name: "index_lectures_on_title_lecturer_faculty", unique: true
     t.index ["title", "lecturer"], name: "index_lectures_on_title_and_lecturer"
     t.index ["title"], name: "index_lectures_on_title"
+  end
+
+  create_table "lecture_offerings", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "lecture_id", null: false
+    t.integer "year", null: false
+    t.string "registration_code", null: false
+    t.string "shozoku_code", null: false
+    t.string "semester_label"
+    t.string "term_label"
+    t.string "term_code"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["lecture_id"], name: "index_lecture_offerings_on_lecture_id"
+    t.index ["year", "registration_code"], name: "index_lecture_offerings_on_year_and_registration_code", unique: true
+    t.index ["year", "term_code"], name: "index_lecture_offerings_on_year_and_term_code"
+  end
+
+  create_table "offering_slots", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "lecture_offering_id", null: false
+    t.integer "day", null: false
+    t.integer "period", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["day", "period"], name: "index_offering_slots_on_day_and_period"
+    t.index ["lecture_offering_id", "day", "period"], name: "index_offering_slots_on_offering_and_slot", unique: true
+    t.index ["lecture_offering_id"], name: "index_offering_slots_on_lecture_offering_id"
   end
 
   create_table "reviews", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -90,6 +116,8 @@ ActiveRecord::Schema[7.0].define(version: 2026_03_21_000004) do
 
   add_foreign_key "bookmarks", "lectures"
   add_foreign_key "bookmarks", "users"
+  add_foreign_key "lecture_offerings", "lectures"
+  add_foreign_key "offering_slots", "lecture_offerings"
   add_foreign_key "reviews", "users"
   add_foreign_key "site_settings", "users", column: "last_updated_by_user_id"
   add_foreign_key "thanks", "reviews"

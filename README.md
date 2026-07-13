@@ -163,7 +163,7 @@ docker compose run --rm gatareview-back bin/verify
 
 ## 授業 CSV 自動生成
 
-DB 登録は行わず、シラバス検索から seed 互換の CSV だけを生成します。
+DB 登録は行わず、シラバス検索から9列のCSVを生成します。科目・教員・学部に加え、年度、開講番号、所属コード、学期、ターム、曜限を含みます。
 
 ```bash
 bin/rails lectures:export_csv YEAR=2026
@@ -203,6 +203,12 @@ bin/rails lectures:count
 
 ```bash
 bin/rails lectures:count FACULTY='E:経済科学部'
+```
+
+年度ごとの開講・曜限件数（曜限なしの集中講義等も確認できます）:
+
+```bash
+bin/rails lectures:offerings_count
 ```
 
 ## Heroku での本番投入手順

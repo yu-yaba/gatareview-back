@@ -41,14 +41,19 @@ RSpec.describe Syllabus::LectureCsvExporter do
   end
 
   def result_page_html(flow_key:, total_count:, rows:)
-    rendered_rows = rows.each_with_index.map do |(title, lecturer), index|
+    rendered_rows = rows.each_with_index.map do |row, index|
+      title, lecturer, semester_label, term_label, day_periods, registration_code = row
+      semester_label ||= '第1学期'
+      term_label ||= '第1ターム'
+      day_periods ||= '他'
+      registration_code ||= format('250A%04d', index + 1)
       <<~ROW
         <tr>
           <td>#{index + 1}</td>
-          <td>第1学期</td>
-          <td>通年</td>
-          <td>他</td>
-          <td>#{format('250A%04d', index + 1)}</td>
+          <td>#{semester_label}</td>
+          <td>#{term_label}</td>
+          <td>#{day_periods}</td>
+          <td>#{registration_code}</td>
           <td>#{title}</td>
           <td>#{lecturer}</td>
           <td>参照</td>
@@ -138,7 +143,8 @@ RSpec.describe Syllabus::LectureCsvExporter do
       year: 2026,
       output_dir: @tmp_dir,
       client: client,
-      timestamp: timestamp
+      timestamp: timestamp,
+      sleeper: ->(_) {}
     ).call
 
     expect(result.path.basename.to_s).to eq('lectureData_2026_20260102_030405.csv')
@@ -146,9 +152,9 @@ RSpec.describe Syllabus::LectureCsvExporter do
     expect(result.faculty_counts['H:人文学部']).to eq(3)
     expect(CSV.read(result.path)).to eq(
       [
-        ['Alpha Course', '中本 真人', 'H:人文学部'],
-        ['Beta Course', '太田 凌嘉', 'H:人文学部'],
-        ['Gamma Course', '原 直史', 'H:人文学部']
+        ['Alpha Course', '中本 真人', 'H:人文学部', '2026', '250A0002', '01', '第1学期', '第1ターム', ''],
+        ['Beta Course', '太田 凌嘉', 'H:人文学部', '2026', '250A0001', '01', '第1学期', '第1ターム', ''],
+        ['Gamma Course', '原 直史', 'H:人文学部', '2026', '250A0001', '01', '第1学期', '第1ターム', '']
       ]
     )
     expect(client.requests).to include([:page, 'humanities-flow', 2, 200])
@@ -175,13 +181,14 @@ RSpec.describe Syllabus::LectureCsvExporter do
       year: 2026,
       output_dir: @tmp_dir,
       client: client,
-      timestamp: timestamp
+      timestamp: timestamp,
+      sleeper: ->(_) {}
     ).call
 
     expect(result.faculty_counts['K:教育学部']).to eq(2)
     expect(CSV.read(result.path)).to include(
-      ['教育学概論', '佐藤 花子', 'K:教育学部'],
-      ['教育実習', '山田 太郎', 'K:教育学部']
+      ['教育学概論', '佐藤 花子', 'K:教育学部', '2026', '250A0001', '03', '第1学期', '第1ターム', ''],
+      ['教育実習', '山田 太郎', 'K:教育学部', '2026', '250A0001', '03', '第1学期', '第1ターム', '']
     )
     expect(client.requests).to include([:search, '2026', '03', nil, 200])
     expect(client.requests).to include([:search, '2026', '03', '3', 200])
@@ -200,10 +207,28 @@ RSpec.describe Syllabus::LectureCsvExporter do
       year: 2026,
       output_dir: @tmp_dir,
       client: client,
-      timestamp: timestamp
+      timestamp: timestamp,
+      sleeper: ->(_) {}
     )
 
     expect { exporter.call }.to raise_error(described_class::Error, /教育学部/)
     expect(Dir.glob(@tmp_dir.join('*.csv').to_s)).to be_empty
+  end
+
+  it 'exports all v2 fields and normalizes multiple day periods' do
+    client = FakeCampusSquareClient.new(
+      search_pages: {
+        ['2026', '01', nil, 200] => result_page_html(
+          flow_key: 'humanities-flow', total_count: 1,
+          rows: [['心理学　概論Ａ', '新美　亮輔', '第1学期', '第1,2ターム', '月２, 木 2', '261H2001']]
+        )
+      }
+    )
+
+    result = described_class.new(year: 2026, output_dir: @tmp_dir, client: client, timestamp: timestamp, sleeper: ->(_) {}).call
+
+    expect(CSV.read(result.path)).to include(
+      ['心理学 概論Ａ', '新美 亮輔', 'H:人文学部', '2026', '261H2001', '01', '第1学期', '第1,2ターム', '月2|木2']
+    )
   end
 end

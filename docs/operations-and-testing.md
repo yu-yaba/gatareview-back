@@ -49,12 +49,14 @@ docker-compose run --rm gatareview-back bundle exec rspec
 
 ```bash
 docker-compose run --rm gatareview-back bundle exec rspec spec/models/review_spec.rb
+docker-compose run --rm gatareview-back bundle exec rspec spec/models/lecture_offering_spec.rb
 docker-compose run --rm gatareview-back bundle exec rspec spec/services/syllabus/lecture_csv_importer_spec.rb
 ```
 
 現行の主な spec:
 - `spec/models/review_spec.rb`
 - `spec/models/site_setting_spec.rb`
+- `spec/models/lecture_offering_spec.rb`
 - `spec/services/syllabus/campus_square_client_spec.rb`
 - `spec/services/syllabus/lecture_csv_exporter_spec.rb`
 - `spec/services/syllabus/lecture_csv_importer_spec.rb`

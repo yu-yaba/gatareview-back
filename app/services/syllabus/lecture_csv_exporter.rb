@@ -31,11 +31,13 @@ module Syllabus
     Result = Struct.new(:path, :row_count, :faculty_counts, keyword_init: true)
     ParsedSearchPage = Struct.new(:rows, :flow_execution_key, :total_count, :over_limit, :no_results, keyword_init: true)
 
-    def initialize(year:, output_dir: Rails.root, client: CampusSquareClient.new, timestamp: Time.current)
+    def initialize(year:, output_dir: Rails.root, client: CampusSquareClient.new, timestamp: Time.current, sleeper: ->(seconds) { sleep(seconds) })
       @year = year.to_s
       @output_dir = Pathname.new(output_dir.to_s)
       @client = client
       @timestamp = timestamp
+      @sleeper = sleeper
+      @has_searched = false
     end
 
     def call
@@ -49,7 +51,7 @@ module Syllabus
       normalized_rows = rows
                         .map { |row| normalize_row(row) }
                         .uniq
-                        .sort_by { |title, lecturer, faculty| [faculty_order.fetch(faculty), title, lecturer, faculty] }
+                        .sort_by { |title, lecturer, faculty, _year, registration_code, *_| [faculty_order.fetch(faculty), title, lecturer, registration_code] }
       faculty_counts = build_faculty_counts(normalized_rows)
 
       path = write_csv(normalized_rows)
@@ -74,27 +76,29 @@ module Syllabus
             raise Error, "#{faculty_config[:faculty]} は開講=#{term_code} でも 500 件を超過しました。追加の分割条件が必要です。"
           end
 
-          rows_for_page(split_page, faculty_config[:faculty])
+          rows_for_page(split_page, faculty_config)
         end
       else
-        rows_for_page(page, faculty_config[:faculty])
+        rows_for_page(page, faculty_config)
       end
     end
 
     def search(faculty_code, term_code: nil)
+      sleeper.call(1) if @has_searched
       html = client.search_results(
         year: year,
         faculty_code: faculty_code,
         term_code: term_code,
         display_count: DISPLAY_COUNT
       )
+      @has_searched = true
       parse_search_page(html)
     end
 
-    def rows_for_page(page, faculty)
+    def rows_for_page(page, faculty_config)
       return [] if page.no_results
 
-      rows = page.rows.map { |row| [row[0], row[1], faculty] }
+      rows = page.rows.map { |row| csv_row(row, faculty_config) }
       return rows if page.total_count <= DISPLAY_COUNT
 
       total_pages = (page.total_count.to_f / DISPLAY_COUNT).ceil
@@ -106,13 +110,13 @@ module Syllabus
         )
         parsed_page = parse_search_page(html)
         if parsed_page.over_limit
-          raise Error, "#{faculty} のページング取得中に 500 件超過レスポンスが返されました。"
+          raise Error, "#{faculty_config[:faculty]} のページング取得中に 500 件超過レスポンスが返されました。"
         end
         if parsed_page.no_results
-          raise Error, "#{faculty} のページ #{page_count} が空でした。ページング取得に失敗した可能性があります。"
+          raise Error, "#{faculty_config[:faculty]} のページ #{page_count} が空でした。ページング取得に失敗した可能性があります。"
         end
 
-        rows.concat(parsed_page.rows.map { |row| [row[0], row[1], faculty] })
+        rows.concat(parsed_page.rows.map { |row| csv_row(row, faculty_config) })
       end
 
       rows
@@ -151,11 +155,15 @@ module Syllabus
         cells = row.css('td')
         next if cells.size < 7
 
+        semester_label = compact_text(cells[1].text)
+        term_label = compact_text(cells[2].text)
+        day_periods = normalize_day_periods(cells[3].text)
+        registration_code = compact_text(cells[4].text)
         title = compact_text(cells[5].text)
         lecturer = normalize_lecturer(cells[6].text)
         next if title.blank? || lecturer.blank?
 
-        parsed_rows << [title, lecturer]
+        parsed_rows << [title, lecturer, semester_label, term_label, day_periods, registration_code]
       end
     end
 
@@ -173,7 +181,28 @@ module Syllabus
       [
         compact_text(row[0]),
         normalize_lecturer(row[1]),
-        compact_text(row[2])
+        compact_text(row[2]),
+        row[3].to_i,
+        compact_text(row[4]),
+        compact_text(row[5]),
+        compact_text(row[6]),
+        compact_text(row[7]),
+        normalize_day_periods(row[8])
+      ]
+    end
+
+    def csv_row(row, faculty_config)
+      title, lecturer, semester_label, term_label, day_periods, registration_code = row
+      [
+        title,
+        lecturer,
+        faculty_config[:faculty],
+        year,
+        registration_code,
+        faculty_config[:code],
+        semester_label,
+        term_label,
+        day_periods
       ]
     end
 
@@ -183,6 +212,11 @@ module Syllabus
 
     def normalize_lecturer(text)
       text.to_s.tr("\u00A0", ' ').tr('　', ' ').gsub(/[[:space:]]+/, ' ').strip
+    end
+
+    def normalize_day_periods(text)
+      normalized = compact_text(text).tr('０１２３４５６７', '01234567')
+      normalized.scan(/([月火水木金土日])\s*([1-7])/).map { |day, period| "#{day}#{period}" }.join('|')
     end
 
     def write_csv(rows)
@@ -218,7 +252,7 @@ module Syllabus
 
     def build_faculty_counts(rows)
       counts = FACULTY_CONFIGS.to_h { |config| [config[:faculty], 0] }
-      rows.each do |(_, _, faculty)|
+      rows.each do |(_, _, faculty, *)|
         counts[faculty] += 1 if counts.key?(faculty)
       end
       counts
