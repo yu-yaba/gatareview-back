@@ -15,7 +15,6 @@ module Api
         @lectures = Lecture.all
 
         # 検索条件とソート処理
-        has_search_params = params[:search].present? || params[:faculty].present? || review_search_params_present?
         sort_param = params[:sort] || 'newest'
         
         # ソート処理
@@ -44,6 +43,7 @@ module Api
 
         # レビュー詳細項目による検索（JOINを使って効率化）
         @lectures = filter_lectures_by_review_details(@lectures) if review_search_params_present?
+        @lectures = filter_lectures_by_offering_details(@lectures) if offering_search_params_present?
 
         # GROUP BYがない場合のみ決定的なソート（IDでソート）を追加
         unless ['highestRating', 'mostReviewed', 'newest'].include?(sort_param)
@@ -51,21 +51,12 @@ module Api
         end
 
         # 総件数を効率的に取得（詳細検索やGROUP BYの場合を適切に処理）
-        if review_search_params_present?
-          # 詳細検索の場合は専用のカウント処理
-          total_count = count_filtered_lectures_by_review_details
-        elsif ['highestRating', 'mostReviewed', 'newest'].include?(sort_param)
-          # GROUP BYを使用している場合、countの結果は異なる
-          count_result = @lectures.except(:order, :limit, :offset).count
-          total_count = count_result.is_a?(Hash) ? count_result.size : count_result
-        else
-          # 通常のcount（GROUP BYなし）
-          total_count = @lectures.except(:order, :limit, :offset, :group).count
-        end
+        count_result = @lectures.except(:order, :limit, :offset).count
+        total_count = count_result.is_a?(Hash) ? count_result.size : count_result
 
         # ページネーション（limit/offsetを使用）
         offset = (page - 1) * per_page
-        @lectures = @lectures.limit(per_page).offset(offset)
+        @lectures = @lectures.includes(lecture_offerings: :offering_slots).limit(per_page).offset(offset)
 
         # 結果が空の場合
         if @lectures.empty?
@@ -98,7 +89,7 @@ module Api
       end
 
       def show
-        @lecture = Lecture.find_by(id: params[:id])
+        @lecture = Lecture.includes(lecture_offerings: :offering_slots).find_by(id: params[:id])
 
         if @lecture
           render json: @lecture.as_json_with_reviews
@@ -122,6 +113,7 @@ module Api
         @lectures = Lecture.joins(:reviews)
                           .group('lectures.id')
                           .order('COUNT(reviews.id) DESC')
+                          .includes(lecture_offerings: :offering_slots)
                           .limit(4)
 
         if @lectures.any?
@@ -142,6 +134,7 @@ module Api
         offset = max_offset.positive? ? SecureRandom.random_number(max_offset + 1) : 0
 
         @lectures = lectures_without_reviews.order(:id)
+                                            .includes(lecture_offerings: :offering_slots)
                                             .offset(offset)
                                             .limit(limit)
 
@@ -171,6 +164,62 @@ module Api
           params[:textbook].present? || params[:attendance].present? ||
           params[:grading_type].present? || params[:content_difficulty].present? ||
           params[:content_quality].present?
+      end
+
+      def offering_search_params_present?
+        params[:term].present? || params[:day].present? || params[:period].present? || params[:offering_year].present?
+      end
+
+      def filter_lectures_by_offering_details(lectures)
+        year = offering_year
+        return Lecture.none unless year
+
+        filtered = lectures.joins(:lecture_offerings)
+                           .where(lecture_offerings: { year: year })
+
+        if params[:term].present?
+          term_codes = term_codes_for(params[:term])
+          return Lecture.none if term_codes.empty?
+
+          filtered = filtered.where(lecture_offerings: { term_code: term_codes })
+        end
+
+        if params[:day].present? || params[:period].present?
+          filtered = filtered.joins(lecture_offerings: :offering_slots)
+          filtered = filtered.where(offering_slots: { day: params[:day].to_i }) if valid_slot_param?(:day)
+          filtered = filtered.where(offering_slots: { period: params[:period].to_i }) if valid_slot_param?(:period)
+          return Lecture.none if params[:day].present? && !valid_slot_param?(:day)
+          return Lecture.none if params[:period].present? && !valid_slot_param?(:period)
+        end
+
+        filtered.distinct
+      end
+
+      def offering_year
+        return LectureOffering.maximum(:year) if params[:offering_year].blank?
+
+        year = Integer(params[:offering_year], 10)
+        year.between?(1000, 9999) ? year : nil
+      rescue ArgumentError
+        nil
+      end
+
+      def term_codes_for(term)
+        return LectureOffering::TERM_EXPANSION.select { |_code, terms| terms.empty? }.keys if %w[intensive other].include?(term.to_s)
+
+        number = Integer(term, 10)
+        return [] unless number.between?(1, 4)
+
+        LectureOffering::TERM_EXPANSION.select { |_code, terms| terms.include?(number) }.keys
+      rescue ArgumentError
+        []
+      end
+
+      def valid_slot_param?(name)
+        value = Integer(params[name], 10)
+        value.between?(1, 7)
+      rescue ArgumentError
+        false
       end
 
       def filter_lectures_by_review_details(lectures)

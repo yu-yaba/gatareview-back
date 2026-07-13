@@ -7,9 +7,23 @@ class Lecture < ApplicationRecord
 
   # シラバスリンク・曜限バッジ表示の代表として使う最新年度の開講
   def latest_offering
+    return lecture_offerings.max_by(&:year) if association(:lecture_offerings).loaded?
+
     lecture_offerings.order(year: :desc).first
   end
 
+  def offering_json
+    offering = latest_offering
+    return nil unless offering
+
+    {
+      year: offering.year,
+      term_label: offering.term_label,
+      term_numbers: offering.term_numbers,
+      slots: offering.offering_slots.sort_by { |slot| [slot.day, slot.period] }.map { |slot| { day: slot.day, period: slot.period } },
+      syllabus_url: offering.syllabus_url
+    }
+  end
   
   before_validation :strip_attributes
   
@@ -40,23 +54,20 @@ class Lecture < ApplicationRecord
   end
 
   def self.as_json_reviews(lectures)
+    lecture_records = lectures.to_a
+
     # 一度に全ての平均評価を取得
-    avg_ratings = average_rating(lectures)
+    avg_ratings = average_rating(lecture_records)
 
     # レビュー数も一度に取得（必要な場合のみ）
     # DISTINCTクエリの場合、pluckが問題を起こす可能性があるため安全に取得
-    lecture_ids = if lectures.is_a?(ActiveRecord::Relation)
-                    # DISTINCTクエリの場合は一度materializeしてからpluck
-                    lectures.to_a.map(&:id)
-                  else
-                    lectures.map(&:id)
-                  end
+    lecture_ids = lecture_records.map(&:id)
     review_counts = Review.where(lecture_id: lecture_ids)
                           .group(:lecture_id)
                           .count
 
     # 必要なカラムのみ選択して効率化
-    lectures.select(:id, :title, :lecturer, :faculty, :created_at, :updated_at).map do |lecture|
+    lecture_records.map do |lecture|
       {
         id: lecture.id,
         title: lecture.title,
@@ -65,7 +76,8 @@ class Lecture < ApplicationRecord
         created_at: lecture.created_at,
         updated_at: lecture.updated_at,
         avg_rating: (avg_ratings[lecture.id.to_s] || 0).round(1),
-        review_count: review_counts[lecture.id.to_s] || 0
+        review_count: review_counts[lecture.id.to_s] || 0,
+        offering: lecture.offering_json
       }
     end
   end
@@ -79,7 +91,8 @@ class Lecture < ApplicationRecord
     # as_jsonで基本属性を取得し、追加情報をマージ
     as_json.merge(
       avg_rating: avg_rating.round(1),
-      review_count: review_count
+      review_count: review_count,
+      offering: offering_json
     )
   end
 
