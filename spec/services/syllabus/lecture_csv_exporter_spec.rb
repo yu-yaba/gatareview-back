@@ -4,42 +4,42 @@ require 'rails_helper'
 require 'csv'
 require 'tmpdir'
 
-RSpec.describe Syllabus::LectureCsvExporter do
-  class FakeCampusSquareClient
-    attr_reader :requests
+class FakeCampusSquareClient
+  attr_reader :requests
 
-    def initialize(search_pages: {}, paged_results: {})
-      @search_pages = search_pages
-      @paged_results = paged_results
-      @requests = []
-    end
-
-    def search_results(year:, faculty_code:, term_code: nil, display_count: Syllabus::LectureCsvExporter::DISPLAY_COUNT)
-      requests << [:search, year.to_s, faculty_code, term_code, display_count]
-      @search_pages.fetch([year.to_s, faculty_code, term_code, display_count]) { no_results_html }
-    end
-
-    def fetch_results_page(flow_execution_key:, page_count:, display_count: Syllabus::LectureCsvExporter::DISPLAY_COUNT)
-      requests << [:page, flow_execution_key, page_count, display_count]
-      @paged_results.fetch([flow_execution_key, page_count, display_count])
-    end
-
-    private
-
-    def no_results_html
-      <<~HTML
-        <html>
-          <body>
-            <span class="error">#{Syllabus::LectureCsvExporter::NO_RESULTS_MESSAGE}</span>
-            <form name="KeywordForm">
-              <input type="hidden" name="_flowExecutionKey" value="no-results-flow">
-            </form>
-          </body>
-        </html>
-      HTML
-    end
+  def initialize(search_pages: {}, paged_results: {})
+    @search_pages = search_pages
+    @paged_results = paged_results
+    @requests = []
   end
 
+  def search_results(year:, faculty_code:, term_code: nil, display_count: Syllabus::LectureCsvExporter::DISPLAY_COUNT)
+    requests << [:search, year.to_s, faculty_code, term_code, display_count]
+    @search_pages.fetch([year.to_s, faculty_code, term_code, display_count]) { no_results_html }
+  end
+
+  def fetch_results_page(flow_execution_key:, page_count:, display_count: Syllabus::LectureCsvExporter::DISPLAY_COUNT)
+    requests << [:page, flow_execution_key, page_count, display_count]
+    @paged_results.fetch([flow_execution_key, page_count, display_count])
+  end
+
+  private
+
+  def no_results_html
+    <<~HTML
+      <html>
+        <body>
+          <span class="error">#{Syllabus::LectureCsvExporter::NO_RESULTS_MESSAGE}</span>
+          <form name="KeywordForm">
+            <input type="hidden" name="_flowExecutionKey" value="no-results-flow">
+          </form>
+        </body>
+      </html>
+    HTML
+  end
+end
+
+RSpec.describe Syllabus::LectureCsvExporter do
   def result_page_html(flow_key:, total_count:, rows:)
     rendered_rows = rows.each_with_index.map do |(title, lecturer), index|
       <<~ROW
@@ -114,9 +114,10 @@ RSpec.describe Syllabus::LectureCsvExporter do
   let(:timestamp) { Time.zone.local(2026, 1, 2, 3, 4, 5) }
 
   it 'exports a CSV file with pagination and normalized lecturer names' do
+    stub_const('Syllabus::LectureCsvExporter::DISPLAY_COUNT', 2)
     client = FakeCampusSquareClient.new(
       search_pages: {
-        ['2026', '01', nil, 200] => result_page_html(
+        ['2026', '01', nil, 2] => result_page_html(
           flow_key: 'humanities-flow',
           total_count: 3,
           rows: [
@@ -126,7 +127,7 @@ RSpec.describe Syllabus::LectureCsvExporter do
         )
       },
       paged_results: {
-        ['humanities-flow', 2, 200] => result_page_html(
+        ['humanities-flow', 2, 2] => result_page_html(
           flow_key: 'humanities-flow',
           total_count: 3,
           rows: [['Gamma Course', '原　直史']]
@@ -151,7 +152,7 @@ RSpec.describe Syllabus::LectureCsvExporter do
         ['Gamma Course', '原 直史', 'H:人文学部']
       ]
     )
-    expect(client.requests).to include([:page, 'humanities-flow', 2, 200])
+    expect(client.requests).to include([:page, 'humanities-flow', 2, 2])
   end
 
   it 'splits over-limit faculties by term codes' do

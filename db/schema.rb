@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_03_21_000004) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_16_000000) do
   create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
@@ -84,6 +84,7 @@ ActiveRecord::Schema[7.0].define(version: 2026_03_21_000004) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "reviews_count", default: 0, null: false
+    t.integer "token_version", default: 0, null: false
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["provider", "provider_id"], name: "index_users_on_provider_and_provider_id", unique: true
   end

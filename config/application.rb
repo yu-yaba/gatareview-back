@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'boot'
 
 require 'rails/all'
@@ -8,6 +10,10 @@ Bundler.require(*Rails.groups)
 
 module App
   class Application < Rails::Application
+    # Keep the existing application defaults while upgrading the framework.
+    # New Rails defaults can be adopted separately after compatibility review.
+    config.load_defaults 7.0
+
     # lib配下もオートロード対象にする
     config.autoload_paths += %W[#{config.root}/lib]
     # Configuration for the application, engines, and railties goes here.
@@ -22,9 +28,6 @@ module App
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
-
-    # Rails 7.0の新しい接続処理を使用
-    config.active_record.legacy_connection_handling = false
 
     config.generators do |g|
       g.test_framework :rspec
