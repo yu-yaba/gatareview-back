@@ -70,9 +70,7 @@ module Syllabus
       if page.over_limit
         TERM_CODES.flat_map do |term_code|
           split_page = search(faculty_config[:code], term_code: term_code)
-          if split_page.over_limit
-            raise Error, "#{faculty_config[:faculty]} は開講=#{term_code} でも 500 件を超過しました。追加の分割条件が必要です。"
-          end
+          raise Error, "#{faculty_config[:faculty]} は開講=#{term_code} でも 500 件を超過しました。追加の分割条件が必要です。" if split_page.over_limit
 
           rows_for_page(split_page, faculty_config[:faculty])
         end
@@ -105,12 +103,8 @@ module Syllabus
           display_count: DISPLAY_COUNT
         )
         parsed_page = parse_search_page(html)
-        if parsed_page.over_limit
-          raise Error, "#{faculty} のページング取得中に 500 件超過レスポンスが返されました。"
-        end
-        if parsed_page.no_results
-          raise Error, "#{faculty} のページ #{page_count} が空でした。ページング取得に失敗した可能性があります。"
-        end
+        raise Error, "#{faculty} のページング取得中に 500 件超過レスポンスが返されました。" if parsed_page.over_limit
+        raise Error, "#{faculty} のページ #{page_count} が空でした。ページング取得に失敗した可能性があります。" if parsed_page.no_results
 
         rows.concat(parsed_page.rows.map { |row| [row[0], row[1], faculty] })
       end
@@ -119,17 +113,21 @@ module Syllabus
     end
 
     def parse_search_page(html)
-      return ParsedSearchPage.new(over_limit: true, no_results: false, rows: [], total_count: nil, flow_execution_key: nil) if html.include?(OVER_LIMIT_MESSAGE)
-      return ParsedSearchPage.new(over_limit: false, no_results: true, rows: [], total_count: 0, flow_execution_key: parse_flow_execution_key(html)) if html.include?(NO_RESULTS_MESSAGE)
+      if html.include?(OVER_LIMIT_MESSAGE)
+        return ParsedSearchPage.new(over_limit: true, no_results: false, rows: [], total_count: nil,
+                                    flow_execution_key: nil)
+      end
+      if html.include?(NO_RESULTS_MESSAGE)
+        return ParsedSearchPage.new(over_limit: false, no_results: true, rows: [], total_count: 0,
+                                    flow_execution_key: parse_flow_execution_key(html))
+      end
 
       doc = Nokogiri::HTML(html)
       rows = parse_rows(doc)
       total_count = parse_total_count(doc)
       flow_execution_key = parse_flow_execution_key(doc)
 
-      if rows.empty? || total_count.nil? || flow_execution_key.blank?
-        raise Error, 'シラバス検索結果の解析に失敗しました。HTML 構造が変わった可能性があります。'
-      end
+      raise Error, 'シラバス検索結果の解析に失敗しました。HTML 構造が変わった可能性があります。' if rows.empty? || total_count.nil? || flow_execution_key.blank?
 
       ParsedSearchPage.new(
         rows: rows,
@@ -160,7 +158,7 @@ module Syllabus
     end
 
     def parse_total_count(doc)
-      match = doc.text.match(/(\d+)～(\d+)\/(\d+)件表示/)
+      match = doc.text.match(%r{(\d+)～(\d+)/(\d+)件表示})
       match && match[3].to_i
     end
 
