@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_07_13_000002) do
+ActiveRecord::Schema[7.0].define(version: 2026_07_13_000003) do
   create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
@@ -91,6 +91,21 @@ ActiveRecord::Schema[7.0].define(version: 2026_07_13_000002) do
     t.index ["singleton_guard"], name: "index_site_settings_on_singleton_guard", unique: true
   end
 
+  create_table "timetable_entries", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "lecture_id", null: false
+    t.integer "year", null: false
+    t.integer "term", null: false
+    t.integer "day"
+    t.integer "period"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["lecture_id"], name: "index_timetable_entries_on_lecture_id"
+    t.index ["user_id", "year", "term", "day", "period"], name: "index_timetable_entries_on_user_and_slot", unique: true
+    t.index ["user_id", "year"], name: "index_timetable_entries_on_user_id_and_year"
+    t.index ["user_id"], name: "index_timetable_entries_on_user_id"
+  end
+
   create_table "thanks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "review_id"
@@ -120,6 +135,8 @@ ActiveRecord::Schema[7.0].define(version: 2026_07_13_000002) do
   add_foreign_key "offering_slots", "lecture_offerings"
   add_foreign_key "reviews", "users"
   add_foreign_key "site_settings", "users", column: "last_updated_by_user_id"
+  add_foreign_key "timetable_entries", "lectures"
+  add_foreign_key "timetable_entries", "users"
   add_foreign_key "thanks", "reviews"
   add_foreign_key "thanks", "users"
 end

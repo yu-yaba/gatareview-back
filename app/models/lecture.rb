@@ -4,6 +4,7 @@ class Lecture < ApplicationRecord
   has_many :reviews
   has_many :bookmarks, dependent: :destroy
   has_many :lecture_offerings, dependent: :destroy
+  has_many :timetable_entries, dependent: :destroy
 
   # シラバスリンク・曜限バッジ表示の代表として使う最新年度の開講
   def latest_offering

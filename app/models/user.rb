@@ -2,6 +2,7 @@ class User < ApplicationRecord
   has_many :reviews, dependent: :destroy
   has_many :thanks, dependent: :destroy
   has_many :bookmarks, dependent: :destroy
+  has_many :timetable_entries, dependent: :destroy
   has_many :updated_site_settings, class_name: 'SiteSetting', foreign_key: :last_updated_by_user_id,
                                    dependent: :nullify, inverse_of: :last_updated_by
 
