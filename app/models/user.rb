@@ -53,6 +53,7 @@ class User < ApplicationRecord
   def jwt_payload
     {
       user_id: id,
+      token_version: token_version,
       email: email,
       name: name,
       avatar_url: avatar_url

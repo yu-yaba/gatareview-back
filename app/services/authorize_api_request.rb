@@ -18,7 +18,12 @@ class AuthorizeApiRequest
   attr_reader :headers
 
   def user
-    @user ||= User.find(decoded_auth_token[:user_id]) if decoded_auth_token
+    return unless decoded_auth_token
+
+    @user ||= User.find(decoded_auth_token[:user_id]).tap do |user|
+      token_version = Integer(decoded_auth_token[:token_version], exception: false)
+      return nil unless token_version == user.token_version
+    end
   rescue ActiveRecord::RecordNotFound
     nil
   end

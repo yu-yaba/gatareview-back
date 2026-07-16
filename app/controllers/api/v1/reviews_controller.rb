@@ -141,7 +141,7 @@ module Api
         
         return false if params[:token].blank?
 
-        verifier = RecaptchaVerifier.new(params[:token], 'submit', 0.5)
+        verifier = RecaptchaVerifier.new(params[:token], 'submit', 0.5, remote_ip: request.remote_ip)
         verifier.verify
       end
 
