@@ -14,6 +14,7 @@ module Syllabus
 
     def call
       validate!
+      @rollback_status = run.status
       protected_counts = domain_counts
       restored_rows = 0
 
@@ -21,6 +22,7 @@ module Syllabus
         SyllabusImportRun.where(year: run.year).lock.load
         run.lock!
         validate!
+        @rollback_status = run.status
 
         run.syllabus_import_rows.order(sequence_number: :desc).each do |row|
           rollback_row!(row)
@@ -45,21 +47,38 @@ module Syllabus
 
     def validate!
       raise Error, 'CONFIRM=true が必要です' unless confirm
-      raise Error, "rollbackできないrunです: status=#{run.status}" unless run.status == 'applied'
+      raise Error, "rollbackできないrunです: status=#{run.status}" unless run.applied_to_domain?
 
-      later_run = SyllabusImportRun.applied.where(year: run.year).where('applied_at > ?', run.applied_at).exists?
+      later_run = SyllabusImportRun.applied_to_domain.where(year: run.year).where('applied_at > ?', run.applied_at).exists?
       raise Error, '同年度に後続の適用済みrunがあるためrollbackできません' if later_run
     end
 
     def rollback_row!(row)
       case row.action
       when 'create_offering', 'create_lecture_and_offering'
-        LectureOffering.find_by(id: row.matched_offering_id)&.destroy!
-      when 'update_offering', 'unchanged', 'mark_missing'
+        destroy_created_offering!(row)
+      when 'update_offering', 'unchanged'
         restore_offering!(row)
+      when 'mark_missing'
+        restore_offering!(row) unless @rollback_status == 'applied_without_missing'
       when 'create_lecture', 'lecture_unchanged'
         nil
       end
+    end
+
+    def destroy_created_offering!(row)
+      offering = LectureOffering.lock.find_by(id: row.matched_offering_id)
+      return unless offering
+
+      review_ids = offering.reviews.lock.pluck(:id)
+      timetable_entry_ids = offering.timetable_entries.lock.pluck(:id)
+      if review_ids.any? || timetable_entry_ids.any?
+        raise Error,
+              "作成したOfferingが参照されているためrollbackできません: offering=#{offering.id}, " \
+              "reviews=#{review_ids.join(',')}, timetable_entries=#{timetable_entry_ids.join(',')}"
+      end
+
+      offering.destroy!
     end
 
     def restore_offering!(row)

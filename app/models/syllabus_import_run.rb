@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class SyllabusImportRun < ApplicationRecord
-  STATUSES = %w[analyzing analyzed applying applied failed rolled_back].freeze
+  STATUSES = %w[analyzing analyzed applying applied_without_missing applied failed rolled_back].freeze
   SOURCE_TYPES = %w[csv_v2 legacy_csv].freeze
 
   has_many :syllabus_import_rows, dependent: :destroy
@@ -16,9 +16,18 @@ class SyllabusImportRun < ApplicationRecord
   validates :status, inclusion: { in: STATUSES }
 
   scope :applied, -> { where(status: 'applied') }
+  scope :applied_to_domain, -> { where(status: %w[applied_without_missing applied]) }
 
   def applicable?
     status == 'analyzed' && error_count.zero? && conflict_count.zero?
+  end
+
+  def missing_completion_pending?
+    status == 'applied_without_missing'
+  end
+
+  def applied_to_domain?
+    %w[applied_without_missing applied].include?(status)
   end
 
   def calculated_staged_sha256

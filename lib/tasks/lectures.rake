@@ -60,9 +60,12 @@ namespace :lectures do
       confirm: ENV['CONFIRM'] == 'true',
       confirm_missing: ENV['CONFIRM_MISSING'] == 'true'
     ).call
-    puts "Import run #{result.run.id} applied."
+    puts "Import run #{result.run.id}: status=#{result.run.status}"
     puts "Rows applied: #{result.applied_rows}"
     puts "Missing rows skipped: #{result.skipped_missing_rows}"
+    if result.run.missing_completion_pending?
+      puts "未掲載差分を確認後、同じIMPORT_RUN_IDにCONFIRM_MISSING=trueを付けて再実行してください。"
+    end
   rescue KeyError, ActiveRecord::RecordNotFound, Syllabus::ImportApplier::Error => e
     warn e.message
     exit 1

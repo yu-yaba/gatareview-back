@@ -10,6 +10,7 @@ module Syllabus
       :bookmark_count,
       :timetable_entry_count,
       :lectures_with_missing_identity,
+      :normalized_key_mismatches,
       :normalized_lecture_duplicates,
       :invalid_review_lecture_ids,
       :orphan_review_ids,
@@ -23,8 +24,17 @@ module Syllabus
 
     def call
       lecture_ids = Lecture.pluck(:id).to_set
+      normalized_key_mismatches = []
       normalized_groups = Lecture.where(merged_into_lecture_id: nil).group_by do |lecture|
-        lecture.normalized_key.presence || Normalizer.lecture_key(title: lecture.title, lecturer: lecture.lecturer, faculty: lecture.faculty)
+        computed_key = Normalizer.lecture_key(title: lecture.title, lecturer: lecture.lecturer, faculty: lecture.faculty)
+        if lecture.normalized_key != computed_key
+          normalized_key_mismatches << {
+            lecture_id: lecture.id,
+            stored_key: lecture.normalized_key,
+            computed_key:
+          }
+        end
+        computed_key
       end
       invalid_review_ids = []
       orphan_review_ids = []
@@ -42,6 +52,7 @@ module Syllabus
         bookmark_count: Bookmark.count,
         timetable_entry_count: timetable_available? ? TimetableEntry.count : 0,
         lectures_with_missing_identity: Lecture.where(title: [nil, '']).or(Lecture.where(lecturer: [nil, ''])).or(Lecture.where(faculty: [nil, ''])).pluck(:id),
+        normalized_key_mismatches:,
         normalized_lecture_duplicates: normalized_groups.filter_map { |key, lectures| [key, lectures.map(&:id)] if lectures.many? }.to_h,
         invalid_review_lecture_ids: invalid_review_ids,
         orphan_review_ids: orphan_review_ids,

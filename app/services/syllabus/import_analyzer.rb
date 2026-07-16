@@ -368,7 +368,7 @@ module Syllabus
       current_counts = plans.reject { |plan| plan[:action] == 'mark_missing' }
                             .group_by { |plan| plan.dig(:source, :faculty) }
                             .transform_values(&:size)
-      previous_run = SyllabusImportRun.applied.where(year:).order(applied_at: :desc).first
+      previous_run = SyllabusImportRun.applied_to_domain.where(year:).order(applied_at: :desc).first
       previous_counts = previous_run&.faculty_counts || {}
       previous_counts.each do |faculty, previous_count|
         current_count = current_counts[faculty].to_i

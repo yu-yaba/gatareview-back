@@ -14,6 +14,7 @@ module Syllabus
     end
 
     def call
+      @original_status = run.status
       validate!
       @started_application = true
       protected_counts = domain_counts
@@ -23,11 +24,15 @@ module Syllabus
       SyllabusImportRun.transaction do
         SyllabusImportRun.where(year: run.year).lock.load
         run.lock!
+        @original_status = run.status
         validate!
+        @completing_missing = run.missing_completion_pending?
         run.update!(status: 'applying', finished_at: nil)
 
         run.syllabus_import_rows.order(:sequence_number).each do |row|
-          if row.action == 'mark_missing' && !confirm_missing
+          if completing_missing
+            next unless row.action == 'mark_missing'
+          elsif row.action == 'mark_missing' && !confirm_missing
             skipped_missing_rows += 1
             next
           end
@@ -38,13 +43,15 @@ module Syllabus
 
         raise Error, 'Review・Bookmark・TimetableEntryの件数が適用中に変化しました' unless domain_counts == protected_counts
 
-        run.update!(status: 'applied', applied_at: now, finished_at: now)
+        final_status = skipped_missing_rows.positive? ? 'applied_without_missing' : 'applied'
+        run.update!(status: final_status, applied_at: run.applied_at || now, finished_at: now, error_summary: nil)
       end
 
       Result.new(run: run.reload, applied_rows:, skipped_missing_rows:)
     rescue StandardError => e
-      if @started_application && run.persisted? && !%w[applied rolled_back].include?(run.reload.status)
-        run.update_columns(status: 'failed', error_summary: e.message, finished_at: Time.current)
+      if @started_application && run.persisted? && !%w[applied_without_missing applied rolled_back].include?(run.reload.status)
+        failure_status = @original_status == 'applied_without_missing' ? 'applied_without_missing' : 'failed'
+        run.update_columns(status: failure_status, error_summary: e.message, finished_at: Time.current)
       end
       raise e if e.is_a?(Error)
 
@@ -55,13 +62,24 @@ module Syllabus
 
     attr_reader :run, :confirm, :confirm_missing, :now
 
+    def completing_missing
+      @completing_missing
+    end
+
     def validate!
       raise Error, 'CONFIRM=true が必要です' unless confirm
-      raise Error, "適用できないrunです: status=#{run.status}" unless run.applicable?
+      unless run.applicable? || (run.missing_completion_pending? && confirm_missing)
+        raise Error, "適用できないrunです: status=#{run.status}"
+      end
       raise Error, '解析結果のハッシュが一致しません' unless run.staged_sha256.present? && run.calculated_staged_sha256 == run.staged_sha256
 
-      duplicated = SyllabusImportRun.applied.where(year: run.year, source_sha256: run.source_sha256).where.not(id: run.id).exists?
+      duplicated = SyllabusImportRun.applied_to_domain.where(year: run.year, source_sha256: run.source_sha256).where.not(id: run.id).exists?
       raise Error, '同じ年度・同じCSVは既に適用済みです' if duplicated
+
+      return unless run.missing_completion_pending?
+
+      later_run = SyllabusImportRun.applied_to_domain.where(year: run.year).where('applied_at > ?', run.applied_at).exists?
+      raise Error, '同年度に後続の適用済みrunがあるため未掲載差分を適用できません' if later_run
     end
 
     def apply_row!(row)

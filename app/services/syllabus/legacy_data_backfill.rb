@@ -41,7 +41,7 @@ module Syllabus
 
     def backfill_lectures
       count = 0
-      Lecture.find_each do |lecture|
+      Lecture.canonical.find_each do |lecture|
         key = Normalizer.lecture_key(title: lecture.title, lecturer: lecture.lecturer, faculty: lecture.faculty)
         next if lecture.normalized_key == key
 
