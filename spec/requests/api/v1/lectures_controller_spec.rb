@@ -110,6 +110,48 @@ RSpec.describe Api::V1::LecturesController, type: :request do
 
         expect(JSON.parse(response.body).fetch('lectures').map { |lecture| lecture.fetch('id') }).to include(intensive_lecture.id)
       end
+
+      it 'missingの開講を通常検索から除外すること' do
+        missing_lecture = FactoryBot.create(:lecture, title: '未掲載になった講義')
+        missing_offering = LectureOffering.create!(
+          lecture: missing_lecture,
+          year: 2026,
+          registration_code: '261H2999',
+          shozoku_code: '01',
+          term_code: 'C',
+          source_status: 'missing'
+        )
+        OfferingSlot.create!(lecture_offering: missing_offering, day: 1, period: 2)
+
+        get '/api/v1/lectures', params: { term: 3, day: 1, period: 2 }
+
+        ids = JSON.parse(response.body).fetch('lectures').map { |lecture| lecture.fetch('id') }
+        expect(ids).to include(matching_lecture.id)
+        expect(ids).not_to include(missing_lecture.id)
+      end
+
+      it 'シラバス詳細の事実情報で絞り込めること' do
+        LectureOfferingDetail.create!(lecture_offering: matching_offering, campus: '五十嵐', target_years: [2])
+
+        get '/api/v1/lectures', params: { campus: '五十嵐', target_year: 2 }
+
+        expect(JSON.parse(response.body).fetch('lectures').map { |lecture| lecture.fetch('id') }).to eq([matching_lecture.id])
+      end
+    end
+
+    context 'レビュー年度・タームで絞り込む場合' do
+      it '移行前後のカラムを同じ条件で検索できること' do
+        legacy_lecture = FactoryBot.create(:lecture, title: '旧レビュー形式の講義')
+        legacy_review = FactoryBot.create(:review, lecture: legacy_lecture, period_year: '2026', period_term: '1ターム')
+        legacy_review.update_columns(academic_year: nil, term_code: nil)
+        new_lecture = FactoryBot.create(:lecture, title: '新レビュー形式の講義')
+        FactoryBot.create(:review, lecture: new_lecture, academic_year: 2026, term_code: 'A')
+
+        get '/api/v1/lectures', params: { academic_year: 2026, review_term_code: 'A' }
+
+        expect(JSON.parse(response.body).fetch('lectures').map { |lecture| lecture.fetch('id') })
+          .to contain_exactly(legacy_lecture.id, new_lecture.id)
+      end
     end
   end
 

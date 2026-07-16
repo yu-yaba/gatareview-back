@@ -12,7 +12,7 @@ module Api
         per_page = 20
 
         # 効率的なクエリ構築
-        @lectures = Lecture.all
+        @lectures = Lecture.canonical
 
         # 検索条件とソート処理
         sort_param = params[:sort] || 'newest'
@@ -56,7 +56,7 @@ module Api
 
         # ページネーション（limit/offsetを使用）
         offset = (page - 1) * per_page
-        @lectures = @lectures.includes(lecture_offerings: :offering_slots).limit(per_page).offset(offset)
+        @lectures = @lectures.includes(lecture_offerings: %i[offering_slots lecture_offering_detail]).limit(per_page).offset(offset)
 
         # 結果が空の場合
         if @lectures.empty?
@@ -89,7 +89,8 @@ module Api
       end
 
       def show
-        @lecture = Lecture.includes(lecture_offerings: :offering_slots).find_by(id: params[:id])
+        @lecture = Lecture.includes(lecture_offerings: %i[offering_slots lecture_offering_detail]).find_by(id: params[:id])
+        @lecture = @lecture.merged_into_lecture if @lecture&.merged_into_lecture
 
         if @lecture
           render json: @lecture.as_json_with_reviews
@@ -113,7 +114,7 @@ module Api
         @lectures = Lecture.joins(:reviews)
                           .group('lectures.id')
                           .order('COUNT(reviews.id) DESC')
-                          .includes(lecture_offerings: :offering_slots)
+                          .includes(lecture_offerings: %i[offering_slots lecture_offering_detail])
                           .limit(4)
 
         if @lectures.any?
@@ -134,7 +135,7 @@ module Api
         offset = max_offset.positive? ? SecureRandom.random_number(max_offset + 1) : 0
 
         @lectures = lectures_without_reviews.order(:id)
-                                            .includes(lecture_offerings: :offering_slots)
+                                            .includes(lecture_offerings: %i[offering_slots lecture_offering_detail])
                                             .offset(offset)
                                             .limit(limit)
 
@@ -161,13 +162,15 @@ module Api
 
       def review_search_params_present?
         params[:period_year].present? || params[:period_term].present? ||
+          params[:academic_year].present? || params[:review_term_code].present? ||
           params[:textbook].present? || params[:attendance].present? ||
           params[:grading_type].present? || params[:content_difficulty].present? ||
           params[:content_quality].present?
       end
 
       def offering_search_params_present?
-        params[:term].present? || params[:day].present? || params[:period].present? || params[:offering_year].present?
+        params[:term].present? || params[:day].present? || params[:period].present? || params[:offering_year].present? ||
+          offering_detail_params_present?
       end
 
       def filter_lectures_by_offering_details(lectures)
@@ -175,13 +178,25 @@ module Api
         return Lecture.none unless year
 
         filtered = lectures.joins(:lecture_offerings)
-                           .where(lecture_offerings: { year: year })
+                           .where(lecture_offerings: { year: year, source_status: 'active' })
 
         if params[:term].present?
-          term_codes = term_codes_for(params[:term])
-          return Lecture.none if term_codes.empty?
+          if params[:term].to_s == 'intensive'
+            filtered = filtered.where(
+              'lecture_offerings.schedule_kind = :kind OR lecture_offerings.term_code = :term_code',
+              kind: 'intensive', term_code: '4'
+            )
+          elsif params[:term].to_s == 'other'
+            filtered = filtered.where(
+              'lecture_offerings.schedule_kind = :kind OR lecture_offerings.term_code IN (:term_codes)',
+              kind: 'other', term_codes: %w[5 9]
+            )
+          else
+            term_codes = term_codes_for(params[:term])
+            return Lecture.none if term_codes.empty?
 
-          filtered = filtered.where(lecture_offerings: { term_code: term_codes })
+            filtered = filtered.where(lecture_offerings: { term_code: term_codes })
+          end
         end
 
         if params[:day].present? || params[:period].present?
@@ -192,11 +207,13 @@ module Api
           return Lecture.none if params[:period].present? && !valid_slot_param?(:period)
         end
 
+        filtered = filter_by_offering_details(filtered) if offering_detail_params_present?
+
         filtered.distinct
       end
 
       def offering_year
-        return LectureOffering.maximum(:year) if params[:offering_year].blank?
+        return LectureOffering.active.maximum(:year) if params[:offering_year].blank?
 
         year = Integer(params[:offering_year], 10)
         year.between?(1000, 9999) ? year : nil
@@ -205,14 +222,29 @@ module Api
       end
 
       def term_codes_for(term)
-        return LectureOffering::TERM_EXPANSION.select { |_code, terms| terms.empty? }.keys if %w[intensive other].include?(term.to_s)
-
         number = Integer(term, 10)
         return [] unless number.between?(1, 4)
 
         LectureOffering::TERM_EXPANSION.select { |_code, terms| terms.include?(number) }.keys
       rescue ArgumentError
         []
+      end
+
+      def offering_detail_params_present?
+        %i[credits target_year campus language delivery_method subject_category].any? { |key| params[key].present? }
+      end
+
+      def filter_by_offering_details(lectures)
+        filtered = lectures.joins(lecture_offerings: :lecture_offering_detail)
+        filtered = filtered.where(lecture_offering_details: { credits: params[:credits] }) if params[:credits].present?
+        filtered = filtered.where(lecture_offering_details: { campus: params[:campus] }) if params[:campus].present?
+        filtered = filtered.where(lecture_offering_details: { language: params[:language] }) if params[:language].present?
+        filtered = filtered.where(lecture_offering_details: { delivery_method: params[:delivery_method] }) if params[:delivery_method].present?
+        filtered = filtered.where(lecture_offering_details: { subject_category: params[:subject_category] }) if params[:subject_category].present?
+        if params[:target_year].present?
+          filtered = filtered.where('JSON_CONTAINS(lecture_offering_details.target_years, ?)', [params[:target_year].to_i].to_json)
+        end
+        filtered
       end
 
       def valid_slot_param?(name)
@@ -226,10 +258,9 @@ module Api
         conditions, params_values = build_review_search_conditions
         return lectures if conditions.empty?
 
-        # JOINクエリで効率的に検索（DISTINCTを使う場合はSELECTに必要なカラムを明示）
+        # JOINクエリで効率的に検索し、複数ReviewによるLectureの重複を除く
         lectures.joins(:reviews)
                 .where(conditions.join(' AND '), *params_values)
-                .select('lectures.*')
                 .distinct
       end
 
@@ -238,7 +269,7 @@ module Api
         return 0 if conditions.empty?
 
         # 基本クエリを構築
-        base_query = Lecture.all
+        base_query = Lecture.canonical
 
         # 基本検索（キーワード、学部）の条件を追加
         base_query = base_query.search_by_title_and_lecturer(params[:search]) if params[:search].present?
@@ -255,14 +286,30 @@ module Api
         conditions = []
         params_values = []
 
-        if params[:period_year].present?
-          conditions << 'reviews.period_year = ?'
-          params_values << params[:period_year]
+        review_year = params[:academic_year].presence || params[:period_year].presence
+        if review_year
+          conditions << '(reviews.academic_year = ? OR (reviews.academic_year IS NULL AND reviews.period_year = ?))'
+          params_values << review_year.to_i
+          params_values << review_year.to_s
         end
 
-        if params[:period_term].present?
-          conditions << 'reviews.period_term = ?'
-          params_values << params[:period_term]
+        if params[:review_term_code].present?
+          review_term = params[:review_term_code]
+          legacy_terms = Review::PERIOD_TERM_TO_CODE.select { |_label, code| code == review_term }.keys
+          conditions << '(reviews.term_code = ? OR (reviews.term_code IS NULL AND reviews.period_term IN (?)))'
+          params_values << review_term
+          params_values << legacy_terms
+        elsif params[:period_term].present?
+          review_term = Review::PERIOD_TERM_TO_CODE[params[:period_term]]
+          if review_term
+            legacy_terms = Review::PERIOD_TERM_TO_CODE.select { |_label, code| code == review_term }.keys
+            conditions << '(reviews.term_code = ? OR (reviews.term_code IS NULL AND reviews.period_term IN (?)))'
+            params_values << review_term
+            params_values << legacy_terms
+          else
+            conditions << 'reviews.period_term = ?'
+            params_values << params[:period_term]
+          end
         end
 
         if params[:textbook].present?

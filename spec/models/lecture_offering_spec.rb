@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe LectureOffering do
   subject(:offering) do
     described_class.new(
-      lecture: create(:lecture),
+      lecture: FactoryBot.create(:lecture),
       year: 2026,
       registration_code: '261H2001',
       shozoku_code: '01',
@@ -26,6 +26,13 @@ RSpec.describe LectureOffering do
     offering.term_code = '4'
     expect(offering.term_numbers).to eq([])
     expect(offering).to be_intensive
+  end
+
+  it 'unknown schedule is not treated as intensive' do
+    offering.term_code = nil
+    offering.schedule_kind = 'unknown'
+
+    expect(offering).not_to be_intensive
   end
 
   it 'requires a year, registration code, and shozoku code' do

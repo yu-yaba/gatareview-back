@@ -3,8 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe Api::V1::TimetablesController, type: :request do
-  let(:user) { create(:user) }
-  let(:lecture) { create(:lecture) }
+  let(:user) { FactoryBot.create(:user) }
+  let(:lecture) { FactoryBot.create(:lecture) }
 
   before { allow(AuthorizeApiRequest).to receive(:call).and_return({ result: user }) }
 
@@ -31,7 +31,7 @@ RSpec.describe Api::V1::TimetablesController, type: :request do
   end
 
   it 'returns a conflict and replaces only the current users entry on request' do
-    existing = create(:timetable_entry, user: user, year: 2026, term: 1, day: 1, period: 2)
+    existing = FactoryBot.create(:timetable_entry, user: user, year: 2026, term: 1, day: 1, period: 2)
 
     post '/api/v1/timetable/entries', params: { lecture_id: lecture.id, year: 2026, placements: [{ term: 1, day: 1, period: 2 }] }
     expect(response).to have_http_status(:conflict)
@@ -43,8 +43,8 @@ RSpec.describe Api::V1::TimetablesController, type: :request do
   end
 
   it 'only deletes the current users entry' do
-    entry = create(:timetable_entry, user: user)
-    other_entry = create(:timetable_entry, user: create(:user), day: 2)
+    entry = FactoryBot.create(:timetable_entry, user: user)
+    other_entry = FactoryBot.create(:timetable_entry, user: FactoryBot.create(:user), day: 2)
 
     delete "/api/v1/timetable/entries/#{other_entry.id}"
     expect(response).to have_http_status(:not_found)

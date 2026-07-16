@@ -23,25 +23,92 @@ namespace :lectures do
 
   desc 'Import lectures from a CSV file without using db:seed'
   task import_csv: :environment do
-    importer = Syllabus::LectureCsvImporter.new(csv_path: ENV['CSV_PATH'])
-    result = importer.call
+    result = Syllabus::ImportAnalyzer.new(csv_path: ENV['CSV_PATH'], year: ENV['YEAR']).call
+    run = result.run
 
-    puts "CSV imported: #{result.path}"
-    puts "Rows processed: #{result.total_rows_processed}"
-    puts "Rows skipped: #{result.skipped_rows_count}"
-    puts "Rows prepared: #{result.prepared_rows_count}"
-    puts "Lecture count before: #{result.lecture_count_before}"
-    puts "Lecture count after: #{result.lecture_count_after}"
-    puts "Rows inserted: #{result.inserted_count}"
-    puts "Rows ignored (existing or duplicate): #{result.ignored_count}"
-    puts "Matched existing lectures: #{result.matched_existing_lecture_count}"
-    puts "Offerings imported: #{result.offering_count}"
-    puts "Slots imported: #{result.slot_count}"
-    result.faculty_counts.each do |faculty, count|
-      puts "#{faculty}: #{count}"
+    puts "CSV analyzed. Import run: #{run.id}"
+    puts "Status: #{run.status}"
+    puts "Rows: #{run.total_rows}, valid=#{run.valid_rows}, errors=#{run.error_count}, conflicts=#{run.conflict_count}"
+    puts "Lectures: new=#{run.new_lectures_count}"
+    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
+    puts "Run `bundle exec rake lectures:syllabus_report IMPORT_RUN_ID=#{run.id}` to inspect details."
+    puts "No Lecture, Offering, Review, Bookmark, or TimetableEntry was changed."
+  rescue ArgumentError, Syllabus::ImportAnalyzer::Error => e
+    warn e.message
+    exit 1
+  end
+
+  desc 'Analyze a syllabus CSV and persist its diff without changing domain data'
+  task syllabus_analyze: :environment do
+    result = Syllabus::ImportAnalyzer.new(csv_path: ENV['CSV_PATH'], year: ENV['YEAR']).call
+    run = result.run
+    puts "Import run: #{run.id}"
+    puts "Year: #{run.year}, status=#{run.status}, source=#{run.source_type}"
+    puts "Rows: total=#{run.total_rows}, valid=#{run.valid_rows}, errors=#{run.error_count}, conflicts=#{run.conflict_count}"
+    puts "Lectures: new=#{run.new_lectures_count}"
+    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
+    puts run.error_summary if run.error_summary.present?
+  rescue ArgumentError, Syllabus::ImportAnalyzer::Error => e
+    warn e.message
+    exit 1
+  end
+
+  desc 'Apply an analyzed syllabus import run'
+  task syllabus_apply: :environment do
+    result = Syllabus::ImportApplier.new(
+      import_run_id: ENV.fetch('IMPORT_RUN_ID'),
+      confirm: ENV['CONFIRM'] == 'true',
+      confirm_missing: ENV['CONFIRM_MISSING'] == 'true'
+    ).call
+    puts "Import run #{result.run.id} applied."
+    puts "Rows applied: #{result.applied_rows}"
+    puts "Missing rows skipped: #{result.skipped_missing_rows}"
+  rescue KeyError, ActiveRecord::RecordNotFound, Syllabus::ImportApplier::Error => e
+    warn e.message
+    exit 1
+  end
+
+  desc 'Rollback the latest applied syllabus run for its year'
+  task syllabus_rollback: :environment do
+    result = Syllabus::ImportRollback.new(
+      import_run_id: ENV.fetch('IMPORT_RUN_ID'),
+      confirm: ENV['CONFIRM'] == 'true'
+    ).call
+    puts "Import run #{result.run.id} rolled back."
+    puts "Rows restored: #{result.restored_rows}"
+  rescue KeyError, ActiveRecord::RecordNotFound, Syllabus::ImportRollback::Error => e
+    warn e.message
+    exit 1
+  end
+
+  desc 'Show summary and row-level issues for a syllabus import run'
+  task syllabus_report: :environment do
+    run = SyllabusImportRun.find(ENV.fetch('IMPORT_RUN_ID'))
+    puts "Run #{run.id}: year=#{run.year}, status=#{run.status}, source=#{run.source_file_name}"
+    puts "Rows: total=#{run.total_rows}, valid=#{run.valid_rows}, errors=#{run.error_count}, conflicts=#{run.conflict_count}"
+    puts "Lectures: new=#{run.new_lectures_count}"
+    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
+    puts "Faculty counts: #{run.faculty_counts.to_json}"
+    puts run.error_summary if run.error_summary.present?
+    run.syllabus_import_rows.where(action: %w[conflict error]).order(:sequence_number).find_each do |row|
+      puts "sequence=#{row.sequence_number}, source_row=#{row.source_row_number || '-'}, action=#{row.action}, code=#{row.registration_code}, messages=#{Array(row.messages).join(' / ')}"
     end
-    puts 'No db:seed or test lecture seeding was executed.'
-  rescue ArgumentError, Syllabus::LectureCsvImporter::Error => e
+  rescue KeyError, ActiveRecord::RecordNotFound => e
+    warn e.message
+    exit 1
+  end
+
+  desc 'Audit syllabus-related existing data without changing it'
+  task syllabus_audit: :environment do
+    result = Syllabus::DatabaseAudit.new.call
+    puts JSON.pretty_generate(result.to_h)
+  end
+
+  desc 'Backfill additive syllabus columns after a clean audit'
+  task syllabus_backfill: :environment do
+    result = Syllabus::LegacyDataBackfill.new(confirm: ENV['CONFIRM'] == 'true').call
+    puts "Backfill completed: lectures=#{result.lectures_updated}, reviews=#{result.reviews_updated}, offerings=#{result.offerings_updated}"
+  rescue Syllabus::LegacyDataBackfill::Error => e
     warn e.message
     exit 1
   end
@@ -67,7 +134,8 @@ namespace :lectures do
       without_slots_count = LectureOffering.where(year: year)
                                            .where.not(id: OfferingSlot.select(:lecture_offering_id))
                                            .count
-      puts "#{year}: offerings=#{offering_count}, slots=#{slot_count}, offerings_without_slots=#{without_slots_count}"
+      status_counts = LectureOffering.where(year:).group(:source_status).count
+      puts "#{year}: offerings=#{offering_count}, active=#{status_counts['active'].to_i}, missing=#{status_counts['missing'].to_i}, slots=#{slot_count}, offerings_without_slots=#{without_slots_count}"
     end
   end
 end

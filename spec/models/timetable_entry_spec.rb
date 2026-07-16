@@ -3,8 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe TimetableEntry do
-  let(:user) { create(:user) }
-  let(:lecture) { create(:lecture) }
+  let(:user) { FactoryBot.create(:user) }
+  let(:lecture) { FactoryBot.create(:lecture) }
 
   it 'allows intensive entries without a day or period' do
     entry = described_class.new(user: user, lecture: lecture, year: 2026, term: 0)
@@ -20,7 +20,7 @@ RSpec.describe TimetableEntry do
   end
 
   it 'does not allow two lectures in the same slot' do
-    create(:timetable_entry, user: user, year: 2026, term: 1, day: 1, period: 2)
+    FactoryBot.create(:timetable_entry, user: user, year: 2026, term: 1, day: 1, period: 2)
     duplicate = described_class.new(user: user, lecture: lecture, year: 2026, term: 1, day: 1, period: 2)
 
     expect(duplicate).not_to be_valid

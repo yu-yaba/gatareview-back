@@ -38,9 +38,22 @@ class LectureOffering < ApplicationRecord
 
   belongs_to :lecture
   has_many :offering_slots, dependent: :destroy
+  belongs_to :syllabus_organization, optional: true
+  belongs_to :first_seen_import_run, class_name: 'SyllabusImportRun', optional: true, inverse_of: :first_seen_offerings
+  belongs_to :last_seen_import_run, class_name: 'SyllabusImportRun', optional: true, inverse_of: :last_seen_offerings
+  belongs_to :missing_since_import_run, class_name: 'SyllabusImportRun', optional: true, inverse_of: :missing_since_offerings
+  has_one :lecture_offering_detail, dependent: :destroy
+  has_many :reviews, dependent: :nullify
+  has_many :timetable_entries, dependent: :nullify
 
   validates :year, :registration_code, :shozoku_code, presence: true
   validates :registration_code, uniqueness: { scope: :year }
+  validates :term_code, inclusion: { in: TERM_EXPANSION.keys }, allow_nil: true
+  validates :schedule_kind, inclusion: { in: %w[regular intensive other unknown] }
+  validates :source_status, inclusion: { in: %w[active missing] }
+
+  scope :active, -> { where(source_status: 'active') }
+  scope :missing, -> { where(source_status: 'missing') }
 
   def self.term_code_for(label)
     normalized = label.to_s.gsub(/[[:space:]]/, '').tr('，、', ',,').tr('〜', '～')
@@ -56,6 +69,14 @@ class LectureOffering < ApplicationRecord
   end
 
   def intensive?
-    term_numbers.empty?
+    schedule_kind == 'intensive' || term_code == '4'
+  end
+
+  def active?
+    source_status == 'active'
+  end
+
+  def other_schedule?
+    schedule_kind == 'other' || %w[5 9].include?(term_code)
   end
 end

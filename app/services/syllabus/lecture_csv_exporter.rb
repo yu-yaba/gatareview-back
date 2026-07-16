@@ -44,7 +44,7 @@ module Syllabus
       validate_year!
       FileUtils.mkdir_p(output_dir)
 
-      rows = FACULTY_CONFIGS.flat_map do |faculty_config|
+      rows = faculty_configs.flat_map do |faculty_config|
         fetch_faculty_rows(faculty_config)
       end
 
@@ -60,7 +60,7 @@ module Syllabus
 
     private
 
-    attr_reader :year, :output_dir, :client, :timestamp
+    attr_reader :year, :output_dir, :client, :timestamp, :sleeper
 
     def validate_year!
       raise ArgumentError, 'YEAR is required. Example: YEAR=2026' if year.blank?
@@ -99,9 +99,10 @@ module Syllabus
       return [] if page.no_results
 
       rows = page.rows.map { |row| csv_row(row, faculty_config) }
-      return rows if page.total_count <= DISPLAY_COUNT
+      return rows if rows.size >= page.total_count
 
-      total_pages = (page.total_count.to_f / DISPLAY_COUNT).ceil
+      page_size = [page.rows.size, DISPLAY_COUNT].min
+      total_pages = (page.total_count.to_f / page_size).ceil
       (2..total_pages).each do |page_count|
         html = client.fetch_results_page(
           flow_execution_key: page.flow_execution_key,
@@ -216,7 +217,8 @@ module Syllabus
 
     def normalize_day_periods(text)
       normalized = compact_text(text).tr('０１２３４５６７', '01234567')
-      normalized.scan(/([月火水木金土日])\s*([1-7])/).map { |day, period| "#{day}#{period}" }.join('|')
+      slots = normalized.scan(/([月火水木金土日])\s*([1-7])/).map { |day, period| "#{day}#{period}" }
+      slots.any? ? slots.join('|') : normalized
     end
 
     def write_csv(rows)
@@ -247,15 +249,28 @@ module Syllabus
     end
 
     def faculty_order
-      @faculty_order ||= FACULTY_CONFIGS.each_with_index.to_h { |config, index| [config[:faculty], index] }
+      @faculty_order ||= faculty_configs.each_with_index.to_h { |config, index| [config[:faculty], index] }
     end
 
     def build_faculty_counts(rows)
-      counts = FACULTY_CONFIGS.to_h { |config| [config[:faculty], 0] }
+      counts = faculty_configs.to_h { |config| [config[:faculty], 0] }
       rows.each do |(_, _, faculty, *)|
         counts[faculty] += 1 if counts.key?(faculty)
       end
       counts
+    end
+
+    def faculty_configs
+      @faculty_configs ||= begin
+        configs = if defined?(SyllabusOrganization) && SyllabusOrganization.table_exists?
+                    SyllabusOrganization.enabled.for_year(year.to_i).order(:id).map do |organization|
+                      { code: organization.code, faculty: organization.faculty_label }
+                    end
+                  else
+                    []
+                  end
+        configs.presence || FACULTY_CONFIGS
+      end
     end
   end
 end

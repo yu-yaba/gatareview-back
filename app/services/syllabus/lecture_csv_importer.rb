@@ -155,10 +155,7 @@ module Syllabus
       LectureOffering.import(
         offerings,
         validate: false,
-        on_duplicate_key_update: {
-          conflict_target: %i[year registration_code],
-          columns: %i[lecture_id shozoku_code semester_label term_label term_code updated_at]
-        }
+        on_duplicate_key_update: %i[lecture_id shozoku_code semester_label term_label term_code updated_at]
       )
 
       offerings_by_key = LectureOffering.where(year: rows.map { |row| row[:year] }.uniq)

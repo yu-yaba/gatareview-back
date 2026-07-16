@@ -152,9 +152,9 @@ RSpec.describe Syllabus::LectureCsvExporter do
     expect(result.faculty_counts['H:人文学部']).to eq(3)
     expect(CSV.read(result.path)).to eq(
       [
-        ['Alpha Course', '中本 真人', 'H:人文学部', '2026', '250A0002', '01', '第1学期', '第1ターム', ''],
-        ['Beta Course', '太田 凌嘉', 'H:人文学部', '2026', '250A0001', '01', '第1学期', '第1ターム', ''],
-        ['Gamma Course', '原 直史', 'H:人文学部', '2026', '250A0001', '01', '第1学期', '第1ターム', '']
+        ['Alpha Course', '中本 真人', 'H:人文学部', '2026', '250A0002', '01', '第1学期', '第1ターム', '他'],
+        ['Beta Course', '太田 凌嘉', 'H:人文学部', '2026', '250A0001', '01', '第1学期', '第1ターム', '他'],
+        ['Gamma Course', '原 直史', 'H:人文学部', '2026', '250A0001', '01', '第1学期', '第1ターム', '他']
       ]
     )
     expect(client.requests).to include([:page, 'humanities-flow', 2, 200])
@@ -187,8 +187,8 @@ RSpec.describe Syllabus::LectureCsvExporter do
 
     expect(result.faculty_counts['K:教育学部']).to eq(2)
     expect(CSV.read(result.path)).to include(
-      ['教育学概論', '佐藤 花子', 'K:教育学部', '2026', '250A0001', '03', '第1学期', '第1ターム', ''],
-      ['教育実習', '山田 太郎', 'K:教育学部', '2026', '250A0001', '03', '第1学期', '第1ターム', '']
+      ['教育学概論', '佐藤 花子', 'K:教育学部', '2026', '250A0001', '03', '第1学期', '第1ターム', '他'],
+      ['教育実習', '山田 太郎', 'K:教育学部', '2026', '250A0001', '03', '第1学期', '第1ターム', '他']
     )
     expect(client.requests).to include([:search, '2026', '03', nil, 200])
     expect(client.requests).to include([:search, '2026', '03', '3', 200])

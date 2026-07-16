@@ -18,7 +18,7 @@ RSpec.describe Syllabus::LectureCsvImporter do
   end
 
   it 'imports lectures from an explicitly specified CSV and reports counts' do
-    create(:lecture, title: '既存講義', lecturer: '既存 教員', faculty: 'H:人文学部')
+    FactoryBot.create(:lecture, title: '既存講義', lecturer: '既存 教員', faculty: 'H:人文学部')
     csv_path = write_csv(
       'lectureData_2026.csv',
       <<~CSV
@@ -75,7 +75,7 @@ RSpec.describe Syllabus::LectureCsvImporter do
   end
 
   it 'imports v2 offerings, matches an existing lecture, and expands full-width day periods' do
-    lecture = create(:lecture, title: '既存講義', lecturer: '既存 教員', faculty: 'H:人文学部')
+    lecture = FactoryBot.create(:lecture, title: '既存講義', lecturer: '既存 教員', faculty: 'H:人文学部')
     csv_path = write_csv(
       'lectureData_2026.csv',
       "既存講義,既存 教員,H:人文学部,2026,261H2001,01,第1学期,\"第1,2ターム\",月２|木 2\n"

@@ -8,7 +8,7 @@ module Api
       def show
         year = valid_year(params[:year]) || Date.current.year
         term = valid_term(params[:term]) || current_term
-        entries = current_user.timetable_entries.where(year: year).includes(:lecture)
+        entries = current_user.timetable_entries.where(year: year).includes(:lecture, :lecture_offering)
 
         render json: {
           year: year,
@@ -27,6 +27,11 @@ module Api
         placements = normalized_placements
         return render json: { success: false, errors: ['年度または配置内容が不正です'] }, status: :unprocessable_entity if year.nil? || placements.empty?
 
+        offering = resolve_offering(lecture, year)
+        if params[:lecture_offering_id].present? && offering.nil?
+          return render json: { success: false, errors: ['開講情報が講義または年度と一致しません'] }, status: :unprocessable_entity
+        end
+
         conflicts = slot_conflicts(year, placements)
         if conflicts.any? && !ActiveModel::Type::Boolean.new.cast(params[:replace])
           return render json: { success: false, message: '既に登録済みのコマがあります', conflicts: serialize_entries(conflicts) }, status: :conflict
@@ -35,7 +40,7 @@ module Api
         entries = TimetableEntry.transaction do
           conflicts.each(&:destroy!) if conflicts.any?
           placements.map do |placement|
-            current_user.timetable_entries.create!(lecture: lecture, year: year, **placement)
+            current_user.timetable_entries.create!(lecture: lecture, lecture_offering: offering, year: year, **placement)
           end
         end
 
@@ -71,6 +76,7 @@ module Api
             id: entry.id,
             day: entry.day,
             period: entry.period,
+            lecture_offering_id: entry.lecture_offering_id,
             lecture: {
               id: entry.lecture.id,
               title: entry.lecture.title,
@@ -106,6 +112,15 @@ module Api
 
           current_user.timetable_entries.find_by(year: year, term: placement[:term], day: placement[:day], period: placement[:period])
         end
+      end
+
+      def resolve_offering(lecture, year)
+        if params[:lecture_offering_id].present?
+          return lecture.lecture_offerings.active.find_by(id: params[:lecture_offering_id], year:)
+        end
+
+        offerings = lecture.lecture_offerings.active.where(year:).limit(2).to_a
+        offerings.one? ? offerings.first : nil
       end
 
       def valid_year(value)
