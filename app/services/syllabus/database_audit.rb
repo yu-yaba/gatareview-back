@@ -36,6 +36,10 @@ module Syllabus
         end
         computed_key
       end
+      lectures_with_missing_identity = Lecture.find_each.filter_map do |lecture|
+        identity = [lecture.title, lecture.lecturer, lecture.faculty].map { |value| Normalizer.text(value) }
+        lecture.id if identity.any?(&:blank?)
+      end
       invalid_review_ids = []
       orphan_review_ids = []
       Review.find_each do |review|
@@ -51,7 +55,7 @@ module Syllabus
         review_count: Review.count,
         bookmark_count: Bookmark.count,
         timetable_entry_count: timetable_available? ? TimetableEntry.count : 0,
-        lectures_with_missing_identity: Lecture.where(title: [nil, '']).or(Lecture.where(lecturer: [nil, ''])).or(Lecture.where(faculty: [nil, ''])).pluck(:id),
+        lectures_with_missing_identity:,
         normalized_key_mismatches:,
         normalized_lecture_duplicates: normalized_groups.filter_map { |key, lectures| [key, lectures.map(&:id)] if lectures.many? }.to_h,
         invalid_review_lecture_ids: invalid_review_ids,

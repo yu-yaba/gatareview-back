@@ -43,7 +43,8 @@ module Api
 
         # レビュー詳細項目による検索（JOINを使って効率化）
         @lectures = filter_lectures_by_review_details(@lectures) if review_search_params_present?
-        @lectures = filter_lectures_by_offering_details(@lectures) if offering_search_params_present?
+        serialize_matching_offerings = offering_search_params_present?
+        @lectures = filter_lectures_by_offering_details(@lectures) if serialize_matching_offerings
 
         # GROUP BYがない場合のみ決定的なソート（IDでソート）を追加
         unless ['highestRating', 'mostReviewed', 'newest'].include?(sort_param)
@@ -73,7 +74,8 @@ module Api
         end
 
         # JSON化（N+1問題を回避）
-        @lectures_json = Lecture.as_json_reviews(@lectures)
+        offerings_by_lecture_id = matching_offerings_by_lecture_id(@lectures) if serialize_matching_offerings
+        @lectures_json = Lecture.as_json_reviews(@lectures, offerings_by_lecture_id: offerings_by_lecture_id)
 
         total_pages = (total_count.to_f / per_page).ceil
 
@@ -92,11 +94,15 @@ module Api
         @lecture = Lecture.includes(lecture_offerings: %i[offering_slots lecture_offering_detail]).find_by(id: params[:id])
         @lecture = @lecture.merged_into_lecture if @lecture&.merged_into_lecture
 
-        if @lecture
-          render json: @lecture.as_json_with_reviews
-        else
+        unless @lecture
           render json: { error: '指定された講義は存在しません。' }, status: :not_found
+          return
         end
+
+        offering = requested_offering(@lecture)
+        return if performed?
+
+        render json: @lecture.as_json_with_reviews(offering: offering)
       end
 
       def create
@@ -174,11 +180,16 @@ module Api
       end
 
       def filter_lectures_by_offering_details(lectures)
-        year = offering_year
-        return Lecture.none unless year
+        lectures.where(id: matching_offerings.select(:lecture_id))
+      end
 
-        filtered = lectures.joins(:lecture_offerings)
-                           .where(lecture_offerings: { year: year, source_status: 'active' })
+      def matching_offerings
+        return @matching_offerings if defined?(@matching_offerings)
+
+        year = offering_year
+        return @matching_offerings = LectureOffering.none unless year
+
+        filtered = LectureOffering.active.where(year: year)
 
         if params[:term].present?
           if params[:term].to_s == 'intensive'
@@ -193,23 +204,35 @@ module Api
             )
           else
             term_codes = term_codes_for(params[:term])
-            return Lecture.none if term_codes.empty?
+            return @matching_offerings = LectureOffering.none if term_codes.empty?
 
-            filtered = filtered.where(lecture_offerings: { term_code: term_codes })
+            filtered = filtered.where(term_code: term_codes)
           end
         end
 
         if params[:day].present? || params[:period].present?
-          filtered = filtered.joins(lecture_offerings: :offering_slots)
+          return @matching_offerings = LectureOffering.none if params[:day].present? && !valid_slot_param?(:day)
+          return @matching_offerings = LectureOffering.none if params[:period].present? && !valid_slot_param?(:period)
+
+          filtered = filtered.joins(:offering_slots)
           filtered = filtered.where(offering_slots: { day: params[:day].to_i }) if valid_slot_param?(:day)
           filtered = filtered.where(offering_slots: { period: params[:period].to_i }) if valid_slot_param?(:period)
-          return Lecture.none if params[:day].present? && !valid_slot_param?(:day)
-          return Lecture.none if params[:period].present? && !valid_slot_param?(:period)
         end
 
-        filtered = filter_by_offering_details(filtered) if offering_detail_params_present?
+        filtered = filter_offerings_by_details(filtered) if offering_detail_params_present?
 
-        filtered.distinct
+        @matching_offerings = filtered.distinct
+      end
+
+      def matching_offerings_by_lecture_id(lectures)
+        lecture_ids = lectures.map(&:id)
+
+        matching_offerings.where(lecture_id: lecture_ids)
+                          .includes(:offering_slots, :lecture_offering_detail)
+                          .order(:lecture_id, :id)
+                          .each_with_object({}) do |offering, result|
+          result[offering.lecture_id] ||= offering
+        end
       end
 
       def offering_year
@@ -234,8 +257,8 @@ module Api
         %i[credits target_year campus language delivery_method subject_category].any? { |key| params[key].present? }
       end
 
-      def filter_by_offering_details(lectures)
-        filtered = lectures.joins(lecture_offerings: :lecture_offering_detail)
+      def filter_offerings_by_details(offerings)
+        filtered = offerings.joins(:lecture_offering_detail)
         filtered = filtered.where(lecture_offering_details: { credits: params[:credits] }) if params[:credits].present?
         filtered = filtered.where(lecture_offering_details: { campus: params[:campus] }) if params[:campus].present?
         filtered = filtered.where(lecture_offering_details: { language: params[:language] }) if params[:language].present?
@@ -245,6 +268,33 @@ module Api
           filtered = filtered.where('JSON_CONTAINS(lecture_offering_details.target_years, ?)', [params[:target_year].to_i].to_json)
         end
         filtered
+      end
+
+      def requested_offering(lecture)
+        return lecture.latest_offering unless params.key?(:offering_id)
+
+        offering_id = positive_offering_id(params[:offering_id])
+        return render_invalid_offering unless offering_id
+
+        offering = lecture.lecture_offerings.active.find_by(id: offering_id)
+        return offering if offering
+
+        render_invalid_offering
+      end
+
+      def positive_offering_id(value)
+        return unless value.is_a?(String) || value.is_a?(Integer)
+        return unless value.to_s.match?(/\A[1-9]\d*\z/)
+
+        id = value.is_a?(Integer) ? value : Integer(value, 10)
+        id if id <= 9_223_372_036_854_775_807
+      rescue ArgumentError, TypeError
+        nil
+      end
+
+      def render_invalid_offering
+        render json: { error: '指定された開講情報はこの講義に存在しません。' }, status: :not_found
+        nil
       end
 
       def valid_slot_param?(name)

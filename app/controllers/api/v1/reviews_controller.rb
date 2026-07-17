@@ -126,7 +126,8 @@ module Api
 
       def review_params
         params.require(:review).permit(:rating, :content, :period_year, :period_term, :textbook, :attendance,
-                                       :grading_type, :content_difficulty, :content_quality, :academic_year, :term_code)
+                                       :grading_type, :content_difficulty, :content_quality, :academic_year, :term_code,
+                                       :lecture_offering_id)
       end
       
       def recaptcha_verified?

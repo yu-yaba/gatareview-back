@@ -49,4 +49,15 @@ RSpec.describe Syllabus::DatabaseAudit do
     expect(result.lectures_updated).to eq(1)
     expect(lecture.reload.normalized_key).to eq(expected_key)
   end
+
+  it '正規化後に空になる空白だけの講義識別子を検出すること' do
+    lecture = FactoryBot.create(:lecture, title: '心理学概論', lecturer: '山田 太郎', faculty: 'H:人文学部')
+    lecture.update_columns(title: " \t　")
+
+    result = described_class.new.call
+
+    expect(result.lectures_with_missing_identity).to include(lecture.id)
+    expect { Syllabus::LegacyDataBackfill.new(confirm: true).call }
+      .to raise_error(Syllabus::LegacyDataBackfill::Error, /lectures_with_missing_identity/)
+  end
 end

@@ -15,7 +15,8 @@ module Api
           term: term,
           entries: serialize_entries(entries.where(term: term)),
           intensive_entries: serialize_entries(entries.where(term: 0)),
-          available_terms: entries.where(term: 1..4).distinct.order(:term).pluck(:term)
+          available_terms: entries.where(term: 1..4).distinct.order(:term).pluck(:term),
+          available_years: current_user.timetable_entries.distinct.order(year: :desc).pluck(:year)
         }
       end
 
@@ -69,14 +70,17 @@ module Api
         lecture_ids = records.map(&:lecture_id)
         ratings = Review.where(lecture_id: lecture_ids).group(:lecture_id).average(:rating)
         counts = Review.where(lecture_id: lecture_ids).group(:lecture_id).count
-        reviewed_ids = current_user.reviews.where(lecture_id: lecture_ids).distinct.pluck(:lecture_id)
+        reviewed_ids = current_user.reviews.where(lecture_id: lecture_ids).distinct.pluck(:lecture_id).map(&:to_i)
 
         records.map do |entry|
           {
             id: entry.id,
+            year: entry.year,
+            term: entry.term,
             day: entry.day,
             period: entry.period,
             lecture_offering_id: entry.lecture_offering_id,
+            lecture_offering_status: entry.lecture_offering&.source_status,
             lecture: {
               id: entry.lecture.id,
               title: entry.lecture.title,
@@ -115,12 +119,9 @@ module Api
       end
 
       def resolve_offering(lecture, year)
-        if params[:lecture_offering_id].present?
-          return lecture.lecture_offerings.active.find_by(id: params[:lecture_offering_id], year:)
-        end
+        return nil unless params[:lecture_offering_id].present?
 
-        offerings = lecture.lecture_offerings.active.where(year:).limit(2).to_a
-        offerings.one? ? offerings.first : nil
+        lecture.lecture_offerings.active.find_by(id: params[:lecture_offering_id], year:)
       end
 
       def valid_year(value)

@@ -95,6 +95,38 @@ RSpec.describe Api::V1::LecturesController, type: :request do
         expect(JSON.parse(response.body).fetch('lectures').map { |lecture| lecture.fetch('id') }).to eq([past_lecture.id])
       end
 
+      it '絞り込みに一致した過年度の開講情報を返すこと' do
+        multi_year_lecture = FactoryBot.create(:lecture, title: '複数年度開講講義')
+        old_offering = LectureOffering.create!(
+          lecture: multi_year_lecture,
+          year: 2025,
+          registration_code: '251H2010',
+          shozoku_code: '01',
+          term_label: '第3ターム',
+          term_code: 'C'
+        )
+        OfferingSlot.create!(lecture_offering: old_offering, day: 1, period: 2)
+        latest_offering = LectureOffering.create!(
+          lecture: multi_year_lecture,
+          year: 2026,
+          registration_code: '261H2010',
+          shozoku_code: '01',
+          term_label: '第1ターム',
+          term_code: 'A'
+        )
+        OfferingSlot.create!(lecture_offering: latest_offering, day: 2, period: 3)
+
+        get '/api/v1/lectures', params: { term: 3, day: 1, period: 2, offering_year: 2025 }
+
+        lecture_json = JSON.parse(response.body).fetch('lectures').find { |item| item.fetch('id') == multi_year_lecture.id }
+        expect(lecture_json.fetch('offering')).to include(
+          'id' => old_offering.id,
+          'year' => 2025,
+          'term_numbers' => [3],
+          'slots' => [{ 'day' => 1, 'period' => 2 }]
+        )
+      end
+
       it '集中・その他はslotなしでもターム検索できること' do
         intensive_lecture = FactoryBot.create(:lecture, title: '集中講義')
         LectureOffering.create!(
@@ -188,6 +220,77 @@ RSpec.describe Api::V1::LecturesController, type: :request do
           'term_numbers' => [1],
           'slots' => [{ 'day' => 1, 'period' => 2 }]
         )
+      end
+
+      it 'offering_idで指定した過年度の開講情報を返すこと' do
+        old_offering = LectureOffering.create!(
+          lecture: lecture,
+          year: 2025,
+          registration_code: '251H2020',
+          shozoku_code: '01',
+          term_label: '第3ターム',
+          term_code: 'C'
+        )
+        OfferingSlot.create!(lecture_offering: old_offering, day: 1, period: 2)
+        LectureOffering.create!(
+          lecture: lecture,
+          year: 2026,
+          registration_code: '261H2020',
+          shozoku_code: '01',
+          term_label: '第1ターム',
+          term_code: 'A'
+        )
+
+        get "/api/v1/lectures/#{lecture.id}", params: { offering_id: old_offering.id }
+
+        expect(response).to have_http_status(:success)
+        expect(JSON.parse(response.body).fetch('offering')).to include(
+          'id' => old_offering.id,
+          'year' => 2025,
+          'term_numbers' => [3],
+          'slots' => [{ 'day' => 1, 'period' => 2 }]
+        )
+      end
+
+      it '別講義またはmissingのoffering_idを拒否すること' do
+        other_lecture = FactoryBot.create(:lecture, title: '別の講義')
+        other_offering = LectureOffering.create!(
+          lecture: other_lecture,
+          year: 2025,
+          registration_code: '251H2021',
+          shozoku_code: '01'
+        )
+        missing_offering = LectureOffering.create!(
+          lecture: lecture,
+          year: 2025,
+          registration_code: '251H2022',
+          shozoku_code: '01',
+          source_status: 'missing'
+        )
+
+        get "/api/v1/lectures/#{lecture.id}", params: { offering_id: other_offering.id }
+        expect(response).to have_http_status(:not_found)
+
+        get "/api/v1/lectures/#{lecture.id}", params: { offering_id: missing_offering.id }
+        expect(response).to have_http_status(:not_found)
+        expect(JSON.parse(response.body)).to include('error' => '指定された開講情報はこの講義に存在しません。')
+      end
+
+      it '空・非数値・非正数・範囲外・配列のoffering_idを拒否すること' do
+        offering = LectureOffering.create!(
+          lecture: lecture,
+          year: 2026,
+          registration_code: '261H2023',
+          shozoku_code: '01'
+        )
+        invalid_values = ['', 'abc', '0', '-1', '9223372036854775808', [offering.id, offering.id]]
+
+        invalid_values.each do |offering_id|
+          get "/api/v1/lectures/#{lecture.id}", params: { offering_id: offering_id }
+
+          expect(response).to have_http_status(:not_found), "offering_id=#{offering_id.inspect}"
+          expect(JSON.parse(response.body)).to include('error' => '指定された開講情報はこの講義に存在しません。')
+        end
       end
     end
 

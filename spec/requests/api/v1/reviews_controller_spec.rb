@@ -3,6 +3,136 @@
 require 'rails_helper'
 
 RSpec.describe Api::V1::ReviewsController, type: :request do
+  describe 'POST /api/v1/lectures/:lecture_id/reviews' do
+    let(:lecture) { FactoryBot.create(:lecture) }
+    let(:review_params) do
+      {
+        rating: 5,
+        content: '過年度の開講情報を指定して投稿するレビューです。',
+        academic_year: 2025,
+        term_code: 'C'
+      }
+    end
+    let(:offering) do
+      LectureOffering.create!(
+        lecture: lecture,
+        year: 2025,
+        registration_code: '251H2301',
+        shozoku_code: '01',
+        term_code: 'C'
+      )
+    end
+
+    it '指定したactiveな開講情報をレビューに保存すること' do
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+        review: review_params.merge(lecture_offering_id: offering.id)
+      }
+
+      expect(response).to have_http_status(:created)
+      expect(Review.last).to have_attributes(
+        lecture_id: lecture.id.to_s,
+        lecture_offering_id: offering.id,
+        academic_year: 2025,
+        term_code: 'C'
+      )
+    end
+
+    it '明示Offeringから変換表外の年度・タームを補完して保存すること' do
+      semester_offering = LectureOffering.create!(
+        lecture: lecture,
+        year: 2026,
+        registration_code: '261H2305',
+        shozoku_code: '01',
+        term_code: '1'
+      )
+
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+        review: {
+          rating: 5,
+          content: '第1学期の開講情報を指定して投稿するレビューです。',
+          period_year: '不明',
+          period_term: '不明',
+          lecture_offering_id: semester_offering.id
+        }
+      }
+
+      expect(response).to have_http_status(:created)
+      expect(Review.last).to have_attributes(
+        lecture_offering_id: semester_offering.id,
+        academic_year: 2026,
+        term_code: '1'
+      )
+    end
+
+    it '別講義・missing・存在しない開講情報を拒否すること' do
+      other_offering = LectureOffering.create!(
+        lecture: FactoryBot.create(:lecture, title: 'レビュー対象外講義'),
+        year: 2025,
+        registration_code: '251H2302',
+        shozoku_code: '01',
+        term_code: 'C'
+      )
+      missing_offering = LectureOffering.create!(
+        lecture: lecture,
+        year: 2025,
+        registration_code: '251H2303',
+        shozoku_code: '01',
+        term_code: 'C',
+        source_status: 'missing'
+      )
+
+      [other_offering.id, missing_offering.id, 0].each do |offering_id|
+        post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+          review: review_params.merge(lecture_offering_id: offering_id)
+        }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+      expect(Review.where(lecture: lecture)).to be_empty
+    end
+  end
+
+  describe 'PATCH /api/v1/reviews/:id' do
+    let(:user) { FactoryBot.create(:user) }
+    let(:lecture) { FactoryBot.create(:lecture) }
+    let(:offering) do
+      LectureOffering.create!(
+        lecture: lecture,
+        year: 2026,
+        registration_code: '261H2304',
+        shozoku_code: '01',
+        term_code: 'A'
+      )
+    end
+    let(:review) do
+      FactoryBot.create(
+        :review,
+        user: user,
+        lecture: lecture,
+        lecture_offering: offering,
+        academic_year: 2026,
+        term_code: 'A'
+      )
+    end
+
+    before { allow(AuthorizeApiRequest).to receive(:call).and_return({ result: user }) }
+
+    it 'リンク済みOfferingが後からmissingになっても既存リンクを維持して更新できること' do
+      review
+      offering.update!(source_status: 'missing')
+
+      patch "/api/v1/reviews/#{review.id}", params: {
+        review: { content: '開講終了後に更新したレビュー本文です。' }
+      }
+
+      expect(response).to have_http_status(:success)
+      expect(review.reload).to have_attributes(
+        content: '開講終了後に更新したレビュー本文です。',
+        lecture_offering_id: offering.id
+      )
+    end
+  end
+
   describe 'GET /api/v1/lectures/:lecture_id/reviews' do
     let!(:lecture) { FactoryBot.create(:lecture) }
     let!(:first_review) { FactoryBot.create(:review, lecture: lecture, content: first_content, created_at: 2.days.ago) }

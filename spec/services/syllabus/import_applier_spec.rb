@@ -15,12 +15,18 @@ RSpec.describe Syllabus::ImportApplier do
     organization.update!(name: '人文学部', faculty_label: 'H:人文学部', enabled_for_import: true)
   end
 
-  def analyzed_run(lecture)
-    path = File.join(@directory, 'lectureData_2027.csv')
+  def analyzed_run(lecture, file_name: 'lectureData_2027.csv', term_label: '第1ターム', raw_day_periods: '月2|木2')
+    path = File.join(@directory, file_name)
     CSV.open(path, 'w') do |csv|
-      csv << [lecture.title, lecture.lecturer, lecture.faculty, 2027, '271H2001', '01', '第1学期', '第1ターム', '月2|木2']
+      csv << [lecture.title, lecture.lecturer, lecture.faculty, 2027, '271H2001', '01', '第1学期', term_label, raw_day_periods]
     end
     Syllabus::ImportAnalyzer.new(csv_path: path).call.run
+  end
+
+  def analyzed_legacy_run(title:, file_name:)
+    path = File.join(@directory, file_name)
+    CSV.open(path, 'w') { |csv| csv << [title, '山田 太郎', 'H:人文学部'] }
+    Syllabus::ImportAnalyzer.new(csv_path: path, year: 2027).call.run
   end
 
   it '確認済みrunを適用し、Reviewの参照と集計を変えないこと' do
@@ -41,7 +47,7 @@ RSpec.describe Syllabus::ImportApplier do
   it '適用したOfferingをrollbackでき、LectureとReviewは削除しないこと' do
     lecture = FactoryBot.create(:lecture, title: '心理学概論Ａ', lecturer: '山田 太郎', faculty: 'H:人文学部')
     review = FactoryBot.create(:review, lecture:)
-    run = analyzed_run(lecture)
+    run = analyzed_run(lecture, raw_day_periods: '木2|月2')
     described_class.new(import_run_id: run.id, confirm: true).call
 
     rollback = Syllabus::ImportRollback.new(import_run_id: run.id, confirm: true).call
@@ -66,6 +72,12 @@ RSpec.describe Syllabus::ImportApplier do
     )
     timetable_entry = FactoryBot.create(
       :timetable_entry,
+      user: User.create!(
+        email: "rollback-#{run.id}@example.com",
+        name: 'ロールバック確認ユーザー',
+        provider: 'google',
+        provider_id: "rollback-#{run.id}"
+      ),
       lecture:,
       lecture_offering: offering,
       year: 2027,
@@ -166,5 +178,115 @@ RSpec.describe Syllabus::ImportApplier do
     expect { described_class.new(import_run_id: second_run.id, confirm: true).call }
       .to raise_error(described_class::Error, /既に適用済み/)
     expect(second_run.reload.status).to eq('analyzed')
+  end
+
+  it '同じOfferingの2つの解析結果を逆順に適用しても後から古いsnapshotで上書きしないこと' do
+    lecture = FactoryBot.create(:lecture, title: '心理学概論Ａ', lecturer: '山田 太郎', faculty: 'H:人文学部')
+    offering = LectureOffering.create!(
+      lecture:,
+      year: 2027,
+      registration_code: '271H2001',
+      shozoku_code: '01',
+      term_code: 'A'
+    )
+    older_run = analyzed_run(
+      lecture,
+      file_name: 'older_2027.csv',
+      term_label: '第1ターム',
+      raw_day_periods: '月2'
+    )
+    newer_run = analyzed_run(
+      lecture,
+      file_name: 'newer_2027.csv',
+      term_label: '第2ターム',
+      raw_day_periods: '火3'
+    )
+
+    described_class.new(import_run_id: newer_run.id, confirm: true).call
+
+    expect { described_class.new(import_run_id: older_run.id, confirm: true).call }
+      .to raise_error(described_class::Error, /再解析が必要/)
+
+    expect(older_run.reload.status).to eq('failed')
+    expect(offering.reload.term_code).to eq('B')
+    expect(offering.offering_slots.pluck(:day, :period)).to eq([[2, 3]])
+  end
+
+  it '適用実行が逆順になってもapplied_atを年度ロック内の実際の適用順にすること' do
+    delayed_run = analyzed_legacy_run(title: '遅延した講義', file_name: 'delayed.csv')
+    first_run = analyzed_legacy_run(title: '先に適用する講義', file_name: 'first.csv')
+    delayed_applier = described_class.new(
+      import_run_id: delayed_run.id,
+      confirm: true,
+      now: Time.zone.parse('2026-01-01 00:00:00')
+    )
+
+    described_class.new(
+      import_run_id: first_run.id,
+      confirm: true,
+      now: Time.zone.parse('2026-02-01 00:00:00')
+    ).call
+    delayed_applier.call
+
+    expect(delayed_run.reload.applied_at).to be > first_run.reload.applied_at
+  end
+
+  it '未掲載差分の追加適用に失敗しても再試行可能なstatusと失敗理由を保存すること' do
+    lecture = FactoryBot.create(:lecture, title: '心理学概論Ａ', lecturer: '山田 太郎', faculty: 'H:人文学部')
+    missing_candidate = LectureOffering.create!(
+      lecture:,
+      year: 2027,
+      registration_code: '271H9999',
+      shozoku_code: '01',
+      term_code: 'A'
+    )
+    run = analyzed_run(lecture)
+    described_class.new(import_run_id: run.id, confirm: true, confirm_missing: false).call
+    run.update_columns(finished_at: 1.day.ago, error_summary: nil)
+    previous_finished_at = run.reload.finished_at
+    missing_candidate.update_columns(term_label: '解析後の外部変更')
+
+    expect do
+      described_class.new(import_run_id: run.id, confirm: true, confirm_missing: true).call
+    end.to raise_error(described_class::Error, /再解析が必要/)
+
+    expect(run.reload.status).to eq('applied_without_missing')
+    expect(run.error_summary).to match(/再解析が必要/)
+    expect(run.finished_at).to be > previous_finished_at
+    expect(missing_candidate.reload.source_status).to eq('active')
+  end
+
+  it 'run適用後に作成Offeringの曜限が変更された場合はrollbackで削除しないこと' do
+    lecture = FactoryBot.create(:lecture, title: '心理学概論Ａ', lecturer: '山田 太郎', faculty: 'H:人文学部')
+    run = analyzed_run(lecture)
+    described_class.new(import_run_id: run.id, confirm: true).call
+    offering = LectureOffering.find_by!(year: 2027, registration_code: '271H2001')
+    offering.offering_slots.create!(day: 2, period: 5)
+
+    expect { Syllabus::ImportRollback.new(import_run_id: run.id, confirm: true).call }
+      .to raise_error(Syllabus::ImportRollback::Error, /rollbackできません/)
+
+    expect(run.reload.status).to eq('applied')
+    expect(offering.reload.offering_slots.pluck(:day, :period)).to include([2, 5])
+  end
+
+  it 'run適用後に更新Offeringが変更された場合はrollbackで復元しないこと' do
+    lecture = FactoryBot.create(:lecture, title: '心理学概論Ａ', lecturer: '山田 太郎', faculty: 'H:人文学部')
+    offering = LectureOffering.create!(
+      lecture:,
+      year: 2027,
+      registration_code: '271H2001',
+      shozoku_code: '01',
+      term_code: 'A'
+    )
+    run = analyzed_run(lecture, term_label: '第2ターム', raw_day_periods: '火3')
+    described_class.new(import_run_id: run.id, confirm: true).call
+    offering.update_columns(source_title: '適用後の外部変更')
+
+    expect { Syllabus::ImportRollback.new(import_run_id: run.id, confirm: true).call }
+      .to raise_error(Syllabus::ImportRollback::Error, /rollbackできません/)
+
+    expect(run.reload.status).to eq('applied')
+    expect(offering.reload.source_title).to eq('適用後の外部変更')
   end
 end

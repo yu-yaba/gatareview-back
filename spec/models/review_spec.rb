@@ -31,11 +31,85 @@ RSpec.describe Review, type: :model do
     end
 
     it 'writes the additive lecture reference and assigns a unique offering' do
-      review = FactoryBot.build(:review, lecture: lecture, academic_year: 2026, term_code: 'A')
+      review = FactoryBot.build(
+        :review,
+        lecture: lecture,
+        period_year: '2025',
+        period_term: '3ターム',
+        academic_year: 2026,
+        term_code: 'A'
+      )
 
       expect(review).to be_valid
       expect(review.lecture_id_bigint).to eq(lecture.id)
       expect(review.lecture_offering).to eq(offering)
+      expect(review).to have_attributes(academic_year: 2026, term_code: 'A')
+    end
+
+    it 'legacy period fieldsの変更時に正規化値を再計算し不明値をnilにする' do
+      review = FactoryBot.create(
+        :review,
+        lecture: lecture,
+        lecture_offering: offering,
+        period_year: '2026',
+        period_term: '1ターム',
+        academic_year: 2026,
+        term_code: 'A'
+      )
+
+      review.update!(period_year: '2025', period_term: '3ターム', lecture_offering_id: nil)
+      expect(review).to have_attributes(academic_year: 2025, term_code: 'C', lecture_offering_id: nil)
+
+      review.update!(period_year: 'その他', period_term: '不明')
+      expect(review).to have_attributes(academic_year: nil, term_code: nil, lecture_offering_id: nil)
+    end
+
+    it '明示したOfferingから変換表外の年度・タームを補完する' do
+      semester_offering = LectureOffering.create!(
+        lecture: FactoryBot.create(:lecture, title: '第1学期講義'),
+        year: 2026,
+        registration_code: '261H2002',
+        shozoku_code: '01',
+        term_code: '1'
+      )
+      review = FactoryBot.build(
+        :review,
+        lecture: semester_offering.lecture,
+        lecture_offering: semester_offering,
+        period_year: '不明',
+        period_term: '不明',
+        academic_year: nil,
+        term_code: nil
+      )
+
+      expect(review).to be_valid
+      expect(review).to have_attributes(academic_year: 2026, term_code: '1')
+    end
+
+    it '自動関連付けしたOfferingから複合タームコードを補完する' do
+      composite_lecture = FactoryBot.create(:lecture, title: '第2,3ターム講義')
+      composite_offering = LectureOffering.create!(
+        lecture: composite_lecture,
+        year: 2026,
+        registration_code: '261H2003',
+        shozoku_code: '01',
+        term_code: 'G'
+      )
+      review = FactoryBot.build(
+        :review,
+        lecture: composite_lecture,
+        period_year: '2026',
+        period_term: '2,3ターム',
+        academic_year: nil,
+        term_code: nil
+      )
+
+      expect(review).to be_valid
+      expect(review).to have_attributes(
+        lecture_offering: composite_offering,
+        academic_year: 2026,
+        term_code: 'G'
+      )
     end
 
     it 'rejects an offering whose term does not match the review' do
@@ -48,6 +122,7 @@ RSpec.describe Review, type: :model do
       )
 
       expect(review).not_to be_valid
+      expect(review.term_code).to eq('B')
       expect(review.errors[:lecture_offering]).to include('は受講タームと一致しません')
     end
   end

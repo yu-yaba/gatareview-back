@@ -20,6 +20,7 @@ class Review < ApplicationRecord
 
   before_validation :populate_syllabus_references
   before_validation :assign_unambiguous_offering
+  before_validation :populate_references_from_offering
 
   validates :rating, presence: true
   validates :content, presence: true, length: { maximum: 1000 }
@@ -34,16 +35,28 @@ class Review < ApplicationRecord
   def populate_syllabus_references
     self.lecture_id_bigint = Integer(lecture_id, 10) if lecture_id.present? && lecture_id.to_s.match?(/\A\d+\z/)
 
-    if academic_year.blank? && period_year.to_s.match?(/\A\d{4}\z/)
-      self.academic_year = period_year.to_i
+    if !will_save_change_to_academic_year? && (academic_year.blank? || will_save_change_to_period_year?)
+      year = period_year.to_s.match?(/\A\d{4}\z/) ? period_year.to_i : nil
+      self.academic_year = year&.between?(2000, 2100) ? year : nil
     end
-    self.term_code ||= PERIOD_TERM_TO_CODE[period_term]
+
+    if !will_save_change_to_term_code? && (term_code.blank? || will_save_change_to_period_term?)
+      self.term_code = PERIOD_TERM_TO_CODE[period_term]
+    end
   end
 
   def offering_matches_lecture
-    return unless lecture_offering
+    return if lecture_offering_id.blank?
+
+    unless lecture_offering
+      errors.add(:lecture_offering, 'が見つかりません')
+      return
+    end
 
     errors.add(:lecture_offering, 'は講義と一致しません') if lecture_offering.lecture_id.to_s != lecture_id.to_s
+    if will_save_change_to_lecture_offering_id? && !lecture_offering.active?
+      errors.add(:lecture_offering, 'は現在有効ではありません')
+    end
     if academic_year.present? && lecture_offering.year != academic_year
       errors.add(:lecture_offering, 'は受講年度と一致しません')
     end
@@ -55,8 +68,15 @@ class Review < ApplicationRecord
   def assign_unambiguous_offering
     return if lecture_offering_id.present? || lecture_id.blank? || academic_year.blank?
 
-    scope = LectureOffering.where(lecture_id: lecture_id.to_i, year: academic_year)
+    scope = LectureOffering.active.where(lecture_id: lecture_id.to_i, year: academic_year)
     scope = scope.where(term_code:) if term_code.present?
     self.lecture_offering = scope.first if scope.one?
+  end
+
+  def populate_references_from_offering
+    return unless lecture_offering
+
+    self.academic_year ||= lecture_offering.year
+    self.term_code ||= lecture_offering.term_code
   end
 end

@@ -19,8 +19,7 @@ class Lecture < ApplicationRecord
     lecture_offerings.active.order(year: :desc).first
   end
 
-  def offering_json
-    offering = latest_offering
+  def offering_json(offering = latest_offering)
     return nil unless offering
 
     {
@@ -77,7 +76,7 @@ class Lecture < ApplicationRecord
           .average(:rating)
   end
 
-  def self.as_json_reviews(lectures)
+  def self.as_json_reviews(lectures, offerings_by_lecture_id: nil)
     lecture_records = lectures.to_a
 
     # 一度に全ての平均評価を取得
@@ -92,6 +91,12 @@ class Lecture < ApplicationRecord
 
     # 必要なカラムのみ選択して効率化
     lecture_records.map do |lecture|
+      offering = if offerings_by_lecture_id
+                   offerings_by_lecture_id.fetch(lecture.id)
+                 else
+                   lecture.latest_offering
+                 end
+
       {
         id: lecture.id,
         title: lecture.title,
@@ -101,12 +106,12 @@ class Lecture < ApplicationRecord
         updated_at: lecture.updated_at,
         avg_rating: (avg_ratings[lecture.id.to_s] || 0).round(1),
         review_count: review_counts[lecture.id.to_s] || 0,
-        offering: lecture.offering_json
+        offering: lecture.offering_json(offering)
       }
     end
   end
 
-  def as_json_with_reviews
+  def as_json_with_reviews(offering: latest_offering)
     # 関連するレビューの平均評価と数を計算
     # to_f を使って小数点以下の除算を保証
     avg_rating = reviews.average(:rating) || 0
@@ -116,7 +121,7 @@ class Lecture < ApplicationRecord
     as_json.merge(
       avg_rating: avg_rating.round(1),
       review_count: review_count,
-      offering: offering_json
+      offering: offering_json(offering)
     )
   end
 

@@ -70,12 +70,16 @@ module Syllabus
       offering = LectureOffering.lock.find_by(id: row.matched_offering_id)
       return unless offering
 
+      ensure_applied_snapshot!(offering, row)
+
       review_ids = offering.reviews.lock.pluck(:id)
       timetable_entry_ids = offering.timetable_entries.lock.pluck(:id)
-      if review_ids.any? || timetable_entry_ids.any?
+      detail_id = offering.lecture_offering_detail&.id
+      if review_ids.any? || timetable_entry_ids.any? || detail_id
         raise Error,
               "作成したOfferingが参照されているためrollbackできません: offering=#{offering.id}, " \
-              "reviews=#{review_ids.join(',')}, timetable_entries=#{timetable_entry_ids.join(',')}"
+              "reviews=#{review_ids.join(',')}, timetable_entries=#{timetable_entry_ids.join(',')}, " \
+              "detail=#{detail_id}"
       end
 
       offering.destroy!
@@ -84,8 +88,9 @@ module Syllabus
     def restore_offering!(row)
       return if row.before_values.blank?
 
-      offering = LectureOffering.find_by(id: row.matched_offering_id)
+      offering = LectureOffering.lock.find_by(id: row.matched_offering_id)
       raise Error, "復元対象Offeringが見つかりません: #{row.matched_offering_id}" unless offering
+      ensure_applied_snapshot!(offering, row)
 
       values = row.before_values.deep_dup
       slots = values.delete('slots') || []
@@ -97,6 +102,44 @@ module Syllabus
       ))
       offering.offering_slots.delete_all
       slots.each { |slot| offering.offering_slots.create!(day: slot.fetch('day'), period: slot.fetch('period')) }
+    end
+
+    def ensure_applied_snapshot!(offering, row)
+      return if OfferingSnapshot.matches_for_update?(offering, expected_applied_snapshot(row))
+
+      raise Error,
+            "Offeringがrun適用後から変更されているためrollbackできません: " \
+            "row=#{row.sequence_number}, offering=#{offering.id}"
+    end
+
+    def expected_applied_snapshot(row)
+      before = row.before_values.to_h.deep_stringify_keys
+      values = if %w[create_offering create_lecture_and_offering update_offering].include?(row.action)
+                 row.after_values.to_h.deep_stringify_keys
+               else
+                 before.deep_dup
+               end
+
+      values['lecture_id'] = row.matched_lecture_id
+      case row.action
+      when 'create_offering', 'create_lecture_and_offering'
+        values['first_seen_import_run_id'] = run.id
+        values['last_seen_import_run_id'] = run.id
+        values['missing_since_import_run_id'] = nil
+      when 'update_offering'
+        values['first_seen_import_run_id'] = before['first_seen_import_run_id'] || run.id
+        values['last_seen_import_run_id'] = run.id
+        values['missing_since_import_run_id'] = nil
+      when 'unchanged'
+        values['first_seen_import_run_id'] = before['first_seen_import_run_id'] || run.id
+        values['last_seen_import_run_id'] = run.id
+        values['source_status'] = 'active'
+        values['missing_since_import_run_id'] = nil
+      when 'mark_missing'
+        values['source_status'] = 'missing'
+        values['missing_since_import_run_id'] = before['missing_since_import_run_id'] || run.id
+      end
+      values
     end
 
     def domain_counts

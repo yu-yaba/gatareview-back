@@ -19,6 +19,33 @@ RSpec.describe TimetableEntry do
     expect(entry.errors.attribute_names).to include(:day, :period)
   end
 
+  it 'allows a manual placement without an offering reference' do
+    entry = described_class.create!(user: user, lecture: lecture, year: 2026, term: 1, day: 1, period: 2)
+
+    expect(entry.lecture_offering_id).to be_nil
+  end
+
+  it 'rejects an offering for another lecture' do
+    offering = LectureOffering.create!(
+      lecture: FactoryBot.create(:lecture, title: '別講義'),
+      year: 2026,
+      registration_code: '261H2201',
+      shozoku_code: '01'
+    )
+    entry = described_class.new(
+      user: user,
+      lecture: lecture,
+      lecture_offering: offering,
+      year: 2026,
+      term: 1,
+      day: 1,
+      period: 2
+    )
+
+    expect(entry).not_to be_valid
+    expect(entry.errors[:lecture_offering]).to include('は講義と一致しません')
+  end
+
   it 'does not allow two lectures in the same slot' do
     FactoryBot.create(:timetable_entry, user: user, year: 2026, term: 1, day: 1, period: 2)
     duplicate = described_class.new(user: user, lecture: lecture, year: 2026, term: 1, day: 1, period: 2)

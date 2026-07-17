@@ -6,11 +6,11 @@ module Syllabus
 
     Result = Struct.new(:run, :applied_rows, :skipped_missing_rows, keyword_init: true)
 
-    def initialize(import_run_id:, confirm:, confirm_missing: false, now: Time.current)
+    def initialize(import_run_id:, confirm:, confirm_missing: false, now: -> { Time.current })
       @run = SyllabusImportRun.find(import_run_id)
       @confirm = confirm
       @confirm_missing = confirm_missing
-      @now = now
+      @clock = now.respond_to?(:call) ? now : -> { now }
     end
 
     def call
@@ -27,6 +27,7 @@ module Syllabus
         @original_status = run.status
         validate!
         @completing_missing = run.missing_completion_pending?
+        @operation_time = next_application_time
         run.update!(status: 'applying', finished_at: nil)
 
         run.syllabus_import_rows.order(:sequence_number).each do |row|
@@ -44,15 +45,12 @@ module Syllabus
         raise Error, 'Review・Bookmark・TimetableEntryの件数が適用中に変化しました' unless domain_counts == protected_counts
 
         final_status = skipped_missing_rows.positive? ? 'applied_without_missing' : 'applied'
-        run.update!(status: final_status, applied_at: run.applied_at || now, finished_at: now, error_summary: nil)
+        run.update!(status: final_status, applied_at: operation_time, finished_at: operation_time, error_summary: nil)
       end
 
       Result.new(run: run.reload, applied_rows:, skipped_missing_rows:)
     rescue StandardError => e
-      if @started_application && run.persisted? && !%w[applied_without_missing applied rolled_back].include?(run.reload.status)
-        failure_status = @original_status == 'applied_without_missing' ? 'applied_without_missing' : 'failed'
-        run.update_columns(status: failure_status, error_summary: e.message, finished_at: Time.current)
-      end
+      record_failure!(e) if run.persisted?
       raise e if e.is_a?(Error)
 
       raise Error, e.message
@@ -60,7 +58,7 @@ module Syllabus
 
     private
 
-    attr_reader :run, :confirm, :confirm_missing, :now
+    attr_reader :run, :confirm, :confirm_missing, :clock, :operation_time
 
     def completing_missing
       @completing_missing
@@ -140,6 +138,7 @@ module Syllabus
     def update_offering!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
       raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == row.matched_lecture_id
+      ensure_snapshot!(offering, row)
 
       attributes = offering_attributes(row).merge(
         first_seen_import_run_id: offering.first_seen_import_run_id || run.id,
@@ -153,6 +152,7 @@ module Syllabus
     def touch_last_seen!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
       raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == row.matched_lecture_id
+      ensure_snapshot!(offering, row)
 
       offering.update_columns(
         last_seen_import_run_id: run.id,
@@ -164,11 +164,40 @@ module Syllabus
 
     def mark_missing!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
+      raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == row.matched_lecture_id
+      ensure_snapshot!(offering, row)
+
       offering.update_columns(
         source_status: 'missing',
         missing_since_import_run_id: offering.missing_since_import_run_id || run.id,
-        updated_at: now
+        updated_at: operation_time
       )
+    end
+
+    def ensure_snapshot!(offering, row)
+      return if OfferingSnapshot.matches_for_update?(offering, row.before_values)
+
+      raise Error,
+            "Offeringが解析時から変更されているため再解析が必要です: " \
+            "row=#{row.sequence_number}, offering=#{offering.id}"
+    end
+
+    def next_application_time
+      candidate = clock.call
+      latest = SyllabusImportRun.where(year: run.year).where.not(applied_at: nil).maximum(:applied_at)
+      return candidate unless latest
+
+      # 現行DBのDATETIME精度は秒のため、同秒の適用でも必ず全順序が残るようにする
+      [candidate, latest + 1.second].max
+    end
+
+    def record_failure!(error)
+      current_status = run.reload.status
+      if @original_status == 'applied_without_missing' && current_status == 'applied_without_missing'
+        run.update_columns(error_summary: error.message, finished_at: Time.current)
+      elsif @started_application && !%w[applied_without_missing applied rolled_back].include?(current_status)
+        run.update_columns(status: 'failed', error_summary: error.message, finished_at: Time.current)
+      end
     end
 
     def offering_attributes(row)
