@@ -2,9 +2,16 @@
 
 class Review < ApplicationRecord
   PERIOD_TERM_TO_CODE = {
+    '第1学期' => '1',
+    '第2学期' => '2',
+    '年度跨り' => '5',
+    '時間外' => '9',
     '1ターム' => 'A',
     '2ターム' => 'B',
     '1, 2ターム' => 'E',
+    '2, 3ターム' => 'G',
+    '1～3ターム' => 'H',
+    '2～4ターム' => 'I',
     '3ターム' => 'C',
     '4ターム' => 'D',
     '3, 4ターム' => 'F',
@@ -18,8 +25,12 @@ class Review < ApplicationRecord
   belongs_to :user, optional: true, counter_cache: true
   has_many :thanks, dependent: :destroy
 
+  attr_accessor :explicit_offering_reference, :suppress_offering_inference
+
+  before_validation :lock_lecture_for_syllabus_reference
   before_validation :populate_syllabus_references
   before_validation :assign_unambiguous_offering
+  before_validation :lock_offering_for_reference
   before_validation :populate_references_from_offering
 
   validates :rating, presence: true
@@ -45,8 +56,17 @@ class Review < ApplicationRecord
     end
   end
 
+  def lock_lecture_for_syllabus_reference
+    lecture&.lock! if lecture_id.present? && lecture&.persisted?
+  end
+
   def offering_matches_lecture
     return if lecture_offering_id.blank?
+
+    if @missing_offering_reference
+      errors.add(:lecture_offering, 'が見つかりません')
+      return
+    end
 
     unless lecture_offering
       errors.add(:lecture_offering, 'が見つかりません')
@@ -65,8 +85,32 @@ class Review < ApplicationRecord
     end
   end
 
+  def lock_offering_for_reference
+    return if lecture_offering_id.blank?
+
+    @missing_offering_reference = false
+    offering = LectureOffering.lock.find_by(id: lecture_offering_id)
+    if offering
+      self.lecture_offering = offering
+    else
+      association(:lecture_offering).reset
+      @missing_offering_reference = true
+    end
+  end
+
   def assign_unambiguous_offering
-    return if lecture_offering_id.present? || lecture_id.blank? || academic_year.blank?
+    return if suppress_offering_inference
+    return if will_save_change_to_lecture_offering_id? && lecture_offering_id.nil?
+    return if explicit_offering_reference
+
+    if lecture_offering_id.present?
+      return if will_save_change_to_lecture_offering_id?
+      return unless will_save_change_to_academic_year? || will_save_change_to_term_code?
+      return if lecture_offering.year == academic_year && lecture_offering.term_code == term_code
+
+      self.lecture_offering = nil
+    end
+    return if lecture_id.blank? || academic_year.blank?
 
     scope = LectureOffering.active.where(lecture_id: lecture_id.to_i, year: academic_year)
     scope = scope.where(term_code:) if term_code.present?

@@ -82,6 +82,7 @@ RSpec.describe Api::V1::LecturesController, type: :request do
         expect(json.dig('lectures', 0, 'offering')).to include(
           'year' => 2026,
           'term_label' => '第3ターム',
+          'term_code' => 'C',
           'term_numbers' => [3],
           'slots' => [{ 'day' => 1, 'period' => 2 }],
           'syllabus_url' => 'https://syllabus.niigata-u.ac.jp/syllabusHtml/2026/01/01_261H2001_ja_JP.html'
@@ -122,6 +123,7 @@ RSpec.describe Api::V1::LecturesController, type: :request do
         expect(lecture_json.fetch('offering')).to include(
           'id' => old_offering.id,
           'year' => 2025,
+          'term_code' => 'C',
           'term_numbers' => [3],
           'slots' => [{ 'day' => 1, 'period' => 2 }]
         )

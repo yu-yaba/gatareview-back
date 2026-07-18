@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_07_16_000005) do
+ActiveRecord::Schema[7.0].define(version: 2026_07_18_000002) do
   create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
@@ -98,7 +98,7 @@ ActiveRecord::Schema[7.0].define(version: 2026_07_16_000005) do
     t.datetime "merged_at"
     t.index ["lecturer"], name: "index_lectures_on_lecturer"
     t.index ["merged_into_lecture_id"], name: "index_lectures_on_merged_into_lecture_id"
-    t.index ["normalized_key"], name: "index_lectures_on_normalized_key"
+    t.index ["normalized_key"], name: "index_lectures_on_normalized_key_unique", unique: true
     t.index ["source_name", "source_external_id"], name: "index_lectures_on_source_name_and_source_external_id", unique: true
     t.index ["title", "lecturer", "faculty"], name: "index_lectures_on_title_lecturer_faculty", unique: true
     t.index ["title", "lecturer"], name: "index_lectures_on_title_and_lecturer"
@@ -184,6 +184,10 @@ ActiveRecord::Schema[7.0].define(version: 2026_07_16_000005) do
     t.string "row_checksum", limit: 64, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "applied_lecture_id"
+    t.bigint "applied_offering_id"
+    t.index ["applied_lecture_id"], name: "index_syllabus_import_rows_on_applied_lecture_id"
+    t.index ["applied_offering_id"], name: "index_syllabus_import_rows_on_applied_offering_id"
     t.index ["matched_lecture_id"], name: "index_syllabus_import_rows_on_matched_lecture_id"
     t.index ["matched_offering_id"], name: "index_syllabus_import_rows_on_matched_offering_id"
     t.index ["normalized_key"], name: "index_syllabus_import_rows_on_normalized_key"
@@ -220,6 +224,8 @@ ActiveRecord::Schema[7.0].define(version: 2026_07_16_000005) do
     t.datetime "finished_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "staged_payload_version", default: 1, null: false
+    t.string "applied_result_sha256", limit: 64
     t.index ["source_sha256"], name: "index_syllabus_import_runs_on_source_sha256"
     t.index ["year", "status"], name: "index_syllabus_import_runs_on_year_and_status"
   end
@@ -294,6 +300,7 @@ ActiveRecord::Schema[7.0].define(version: 2026_07_16_000005) do
   add_foreign_key "reviews", "users"
   add_foreign_key "site_settings", "users", column: "last_updated_by_user_id"
   add_foreign_key "syllabus_import_rows", "lecture_offerings", column: "matched_offering_id", on_delete: :nullify
+  add_foreign_key "syllabus_import_rows", "lectures", column: "applied_lecture_id"
   add_foreign_key "syllabus_import_rows", "lectures", column: "matched_lecture_id"
   add_foreign_key "syllabus_import_rows", "syllabus_import_runs"
   add_foreign_key "thanks", "reviews"

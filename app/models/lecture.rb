@@ -26,6 +26,7 @@ class Lecture < ApplicationRecord
       id: offering.id,
       year: offering.year,
       term_label: offering.term_label,
+      term_code: offering.term_code,
       term_numbers: offering.term_numbers,
       schedule_kind: offering.schedule_kind,
       source_title: offering.source_title,

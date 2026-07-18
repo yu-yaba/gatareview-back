@@ -6,8 +6,9 @@ module Api
       include Authenticatable
 
       def show
-        year = valid_year(params[:year]) || Date.current.year
-        term = valid_term(params[:term]) || current_term
+        today = current_japan_date
+        year = valid_year(params[:year]) || current_academic_year(today)
+        term = valid_term(params[:term]) || current_term(today)
         entries = current_user.timetable_entries.where(year: year).includes(:lecture, :lecture_offering)
 
         render json: {
@@ -28,37 +29,79 @@ module Api
         placements = normalized_placements
         return render json: { success: false, errors: ['年度または配置内容が不正です'] }, status: :unprocessable_entity if year.nil? || placements.empty?
 
-        offering = resolve_offering(lecture, year)
-        if params[:lecture_offering_id].present? && offering.nil?
-          return render json: { success: false, errors: ['開講情報が講義または年度と一致しません'] }, status: :unprocessable_entity
-        end
+        replace = ActiveModel::Type::Boolean.new.cast(params[:replace])
+        expected_conflict_ids = normalized_conflict_ids
+        conflicts_for_response = nil
+        conflict_state_changed = false
+        offering_invalid = false
+        offering = nil
+        entries = nil
 
-        conflicts = slot_conflicts(year, placements)
-        if conflicts.any? && !ActiveModel::Type::Boolean.new.cast(params[:replace])
-          return render json: { success: false, message: '既に登録済みのコマがあります', conflicts: serialize_entries(conflicts) }, status: :conflict
-        end
+        TimetableEntry.transaction do
+          # 同一ユーザーの空きセルへの同時追加も直列化する。
+          # timetable_entriesの行ロックだけでは、まだ行がないセルを保護できない。
+          current_user.lock!
+          # import側と同じLecture -> Offering順でロックし、循環待ちを避ける。
+          lecture.lock!
+          offering = resolve_offering(lecture, year, lock: true)
+          if params[:lecture_offering_id].present? && offering.nil?
+            offering_invalid = true
+            raise ActiveRecord::Rollback
+          end
 
-        entries = TimetableEntry.transaction do
+          conflicts = slot_conflicts(year, placements, lock: true)
+          current_conflict_ids = conflicts.map(&:id).sort
+
+          if replace
+            unless expected_conflict_ids == current_conflict_ids
+              conflicts_for_response = conflicts
+              conflict_state_changed = true
+              raise ActiveRecord::Rollback
+            end
+          elsif conflicts.any?
+            conflicts_for_response = conflicts
+            raise ActiveRecord::Rollback
+          end
+
           conflicts.each(&:destroy!) if conflicts.any?
-          placements.map do |placement|
+          entries = placements.map do |placement|
             current_user.timetable_entries.create!(lecture: lecture, lecture_offering: offering, year: year, **placement)
           end
         end
 
+        if offering_invalid
+          return render json: { success: false, errors: ['開講情報が講義または年度と一致しません'] }, status: :unprocessable_entity
+        end
+        if conflicts_for_response
+          return render_conflicts(conflicts_for_response, state_changed: conflict_state_changed)
+        end
+
         render json: { success: true, message: '時間割に追加しました', entries: serialize_entries(entries) }, status: :created
       rescue ActiveRecord::RecordInvalid => e
+        conflicts = slot_conflicts(year, placements)
+        return render_conflicts(conflicts, state_changed: true) if conflicts.any?
+
         render json: { success: false, errors: [e.record.errors.full_messages.to_sentence] }, status: :unprocessable_entity
+      rescue ActiveRecord::RecordNotUnique
+        # user行ロックを通らない別経路から同時書き込みされても500にしない。
+        render_conflicts(slot_conflicts(year, placements), state_changed: true)
       end
 
       def destroy
-        entry = current_user.timetable_entries.find_by(id: params[:id])
-        return render json: { success: false, message: '時間割の講義が見つかりません' }, status: :not_found unless entry
+        entry = nil
+        TimetableEntry.transaction do
+          current_user.lock!
+          entry = current_user.timetable_entries.lock.find_by(id: params[:id])
+          next unless entry
 
-        if ActiveModel::Type::Boolean.new.cast(params[:all_for_lecture])
-          current_user.timetable_entries.where(lecture_id: entry.lecture_id, year: entry.year).destroy_all
-        else
-          entry.destroy!
+          if ActiveModel::Type::Boolean.new.cast(params[:all_for_lecture])
+            current_user.timetable_entries.where(lecture_id: entry.lecture_id, year: entry.year).destroy_all
+          else
+            entry.destroy!
+          end
         end
+
+        return render json: { success: false, message: '時間割の講義が見つかりません' }, status: :not_found unless entry
 
         render json: { success: true, message: '時間割から削除しました' }
       end
@@ -94,7 +137,12 @@ module Api
       end
 
       def normalized_placements
-        Array(params[:placements]).filter_map do |placement|
+        raw_placements = params[:placements]
+        return [] unless raw_placements.is_a?(Array) && raw_placements.any?
+
+        placements = raw_placements.map do |placement|
+          next unless placement.is_a?(ActionController::Parameters) || placement.is_a?(Hash)
+
           term = valid_term(placement[:term] || placement['term'])
           next if term.nil?
 
@@ -107,46 +155,97 @@ module Api
 
             { term: term, day: day, period: period }
           end
-        end.uniq
+        end
+
+        return [] if placements.any?(&:nil?)
+
+        placements.uniq
       end
 
-      def slot_conflicts(year, placements)
+      def slot_conflicts(year, placements, lock: false)
+        scope = current_user.timetable_entries
+        scope = scope.lock if lock
+
         placements.filter_map do |placement|
           next if placement[:term].zero?
 
-          current_user.timetable_entries.find_by(year: year, term: placement[:term], day: placement[:day], period: placement[:period])
+          scope.find_by(year: year, term: placement[:term], day: placement[:day], period: placement[:period])
         end
       end
 
-      def resolve_offering(lecture, year)
+      def resolve_offering(lecture, year, lock: false)
         return nil unless params[:lecture_offering_id].present?
 
-        lecture.lecture_offerings.active.find_by(id: params[:lecture_offering_id], year:)
+        scope = lecture.lecture_offerings.active
+        scope = scope.lock if lock
+        scope.find_by(id: params[:lecture_offering_id], year:)
       end
 
       def valid_year(value)
-        year = Integer(value, 10)
-        year.between?(1000, 9999) ? year : nil
-      rescue ArgumentError, TypeError
-        nil
+        year = strict_integer(value)
+        year&.between?(1000, 9999) ? year : nil
       end
 
       def valid_term(value)
-        term = Integer(value, 10)
-        term.between?(0, 4) ? term : nil
-      rescue ArgumentError, TypeError
-        nil
+        term = strict_integer(value)
+        term&.between?(0, 4) ? term : nil
       end
 
       def valid_slot(value)
-        slot = Integer(value, 10)
-        slot.between?(1, 7) ? slot : nil
-      rescue ArgumentError, TypeError
+        slot = strict_integer(value)
+        slot&.between?(1, 7) ? slot : nil
+      end
+
+      def strict_integer(value)
+        return value if value.is_a?(Integer)
+        return unless value.is_a?(String) && value.match?(/\A-?\d+\z/)
+
+        Integer(value, 10)
+      rescue ArgumentError
         nil
       end
 
-      def current_term
-        case Date.current.month
+      def normalized_conflict_ids
+        values = params[:conflict_ids]
+        return nil unless values.is_a?(Array)
+
+        ids = values.map do |value|
+          id = strict_integer(value)
+          break unless id&.positive?
+
+          id
+        end
+        return nil unless ids.is_a?(Array) && ids.length == values.length && ids.uniq.length == ids.length
+
+        ids.sort
+      end
+
+      def render_conflicts(conflicts, state_changed:)
+        message = if state_changed
+                    '時間割の状態が変更されました。内容を確認して再度追加してください'
+                  else
+                    '既に登録済みのコマがあります'
+                  end
+
+        render json: {
+          success: false,
+          message: message,
+          errors: [message],
+          conflict_state_changed: state_changed,
+          conflicts: serialize_entries(conflicts)
+        }, status: :conflict
+      end
+
+      def current_japan_date
+        Time.current.in_time_zone('Asia/Tokyo').to_date
+      end
+
+      def current_academic_year(date)
+        date.month >= 4 ? date.year : date.year - 1
+      end
+
+      def current_term(date)
+        case date.month
         when 4, 5 then 1
         when 6, 7, 8 then 2
         when 9, 10, 11 then 3

@@ -33,6 +33,12 @@ module Syllabus
       Digest::SHA256.hexdigest(canonical(value))
     end
 
+    # 既存のsource_checksumはscalarを文字列化する旧形式を維持する。
+    # import manifestだけは型も完全性の一部として扱い、nil/空文字や数値/文字列を区別する。
+    def typed_checksum(value)
+      Digest::SHA256.hexdigest(typed_canonical(value))
+    end
+
     def canonical(value)
       case value
       when Hash
@@ -43,5 +49,22 @@ module Syllabus
         value.to_s
       end
     end
+
+    def typed_canonical(value)
+      JSON.generate(typed_value(value))
+    end
+
+    def typed_value(value)
+      case value
+      when Hash
+        value.stringify_keys.sort.to_h.transform_values { |child| typed_value(child) }
+      when Array
+        value.map { |child| typed_value(child) }
+      else
+        value
+      end
+    end
+
+    private_class_method :typed_value
   end
 end

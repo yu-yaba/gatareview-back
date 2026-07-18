@@ -64,6 +64,27 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
       )
     end
 
+    it '明示的なnullを年度だけでOfferingへ自動関連付けしないこと' do
+      offering
+
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+        review: {
+          rating: 5,
+          content: '開講区分が不明な過年度レビューです。',
+          period_year: '2025',
+          period_term: 'その他・不明',
+          lecture_offering_id: nil
+        }
+      }
+
+      expect(response).to have_http_status(:created)
+      expect(Review.last).to have_attributes(
+        academic_year: 2025,
+        term_code: nil,
+        lecture_offering_id: nil
+      )
+    end
+
     it '別講義・missing・存在しない開講情報を拒否すること' do
       other_offering = LectureOffering.create!(
         lecture: FactoryBot.create(:lecture, title: 'レビュー対象外講義'),
@@ -129,6 +150,49 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
       expect(review.reload).to have_attributes(
         content: '開講終了後に更新したレビュー本文です。',
         lecture_offering_id: offering.id
+      )
+    end
+
+    it '同年度に1件だけOfferingがあっても明示的なnullで解除すること' do
+      patch "/api/v1/reviews/#{review.id}", params: {
+        review: {
+          period_year: '2026',
+          period_term: 'その他・不明',
+          lecture_offering_id: nil
+        }
+      }
+
+      expect(response).to have_http_status(:success)
+      expect(review.reload).to have_attributes(
+        academic_year: 2026,
+        term_code: nil,
+        lecture_offering_id: nil
+      )
+    end
+
+    it 'Offering IDを省略して年度・タームを変えた場合は変更先の一意なOfferingへ付け替えること' do
+      next_offering = LectureOffering.create!(
+        lecture: lecture,
+        year: 2026,
+        registration_code: '261H2306',
+        shozoku_code: '01',
+        term_code: 'B'
+      )
+
+      patch "/api/v1/reviews/#{review.id}", params: {
+        review: {
+          period_year: '2026',
+          period_term: '2ターム',
+          academic_year: 2026,
+          term_code: 'B'
+        }
+      }
+
+      expect(response).to have_http_status(:success)
+      expect(review.reload).to have_attributes(
+        academic_year: 2026,
+        term_code: 'B',
+        lecture_offering_id: next_offering.id
       )
     end
   end

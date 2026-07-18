@@ -17,20 +17,20 @@ module Syllabus
       @original_status = run.status
       validate!
       @started_application = true
-      protected_counts = domain_counts
       applied_rows = 0
       skipped_missing_rows = 0
 
       SyllabusImportRun.transaction do
         SyllabusImportRun.where(year: run.year).lock.load
         run.lock!
+        rows = run.syllabus_import_rows.order(:sequence_number).lock.to_a
         @original_status = run.status
-        validate!
+        validate!(rows:)
         @completing_missing = run.missing_completion_pending?
         @operation_time = next_application_time
         run.update!(status: 'applying', finished_at: nil)
 
-        run.syllabus_import_rows.order(:sequence_number).each do |row|
+        rows.each do |row|
           if completing_missing
             next unless row.action == 'mark_missing'
           elsif row.action == 'mark_missing' && !confirm_missing
@@ -42,10 +42,19 @@ module Syllabus
           applied_rows += 1
         end
 
-        raise Error, 'Review・Bookmark・TimetableEntryの件数が適用中に変化しました' unless domain_counts == protected_counts
+        offering_ids = rows.filter_map { |row| row.applied_offering_id || row.matched_offering_id }
+        unless DomainReferenceIntegrity.valid_for_offerings?(offering_ids)
+          raise Error, 'Review・TimetableEntryと対象Offeringの参照整合性が適用中に崩れました'
+        end
 
         final_status = skipped_missing_rows.positive? ? 'applied_without_missing' : 'applied'
-        run.update!(status: final_status, applied_at: operation_time, finished_at: operation_time, error_summary: nil)
+        run.update!(
+          status: final_status,
+          applied_at: operation_time,
+          finished_at: operation_time,
+          error_summary: nil,
+          applied_result_sha256: run.calculated_applied_result_sha256(rows:)
+        )
       end
 
       Result.new(run: run.reload, applied_rows:, skipped_missing_rows:)
@@ -64,12 +73,28 @@ module Syllabus
       @completing_missing
     end
 
-    def validate!
+    def validate!(rows: nil)
       raise Error, 'CONFIRM=true が必要です' unless confirm
       unless run.applicable? || (run.missing_completion_pending? && confirm_missing)
         raise Error, "適用できないrunです: status=#{run.status}"
       end
-      raise Error, '解析結果のハッシュが一致しません' unless run.staged_sha256.present? && run.calculated_staged_sha256 == run.staged_sha256
+      if run.staged_payload_version.to_i < SyllabusImportRun::STAGED_PAYLOAD_VERSION
+        message = if run.missing_completion_pending?
+                    '旧形式で未掲載差分を保留したrunは完了できません。' \
+                      'このrunをrollbackしてからCSVを再解析・再適用してください'
+                  else
+                    '旧形式の解析結果は適用できません。CSVを再解析してください'
+                  end
+        raise Error, message
+      end
+      unless run.staged_sha256.present? && run.calculated_staged_sha256(rows:) == run.staged_sha256
+        raise Error, '解析結果のハッシュが一致しません'
+      end
+      if run.staged_payload_version.to_i >= SyllabusImportRun::STAGED_PAYLOAD_VERSION &&
+         run.missing_completion_pending? &&
+         (run.applied_result_sha256.blank? || run.calculated_applied_result_sha256(rows:) != run.applied_result_sha256)
+        raise Error, '適用結果のハッシュが一致しません'
+      end
 
       duplicated = SyllabusImportRun.applied_to_domain.where(year: run.year, source_sha256: run.source_sha256).where.not(id: run.id).exists?
       raise Error, '同じ年度・同じCSVは既に適用済みです' if duplicated
@@ -84,23 +109,27 @@ module Syllabus
       case row.action
       when 'create_lecture'
         lecture = create_lecture!(row)
-        row.update_columns(matched_lecture_id: lecture.id)
+        record_applied_result!(row, lecture:)
       when 'lecture_unchanged'
-        ensure_lecture!(row)
+        lecture = ensure_lecture!(row)
+        record_applied_result!(row, lecture:)
       when 'create_lecture_and_offering'
         lecture = create_lecture!(row)
         offering = create_offering!(row, lecture)
-        row.update_columns(matched_lecture_id: lecture.id, matched_offering_id: offering.id)
+        record_applied_result!(row, lecture:, offering:)
       when 'create_offering'
         lecture = ensure_lecture!(row)
         offering = create_offering!(row, lecture)
-        row.update_columns(matched_offering_id: offering.id)
+        record_applied_result!(row, lecture:, offering:)
       when 'update_offering'
-        update_offering!(row)
+        lecture, offering = update_offering!(row)
+        record_applied_result!(row, lecture:, offering:)
       when 'unchanged'
-        touch_last_seen!(row)
+        lecture, offering = touch_last_seen!(row)
+        record_applied_result!(row, lecture:, offering:)
       when 'mark_missing'
-        mark_missing!(row)
+        lecture, offering = mark_missing!(row)
+        record_applied_result!(row, lecture:, offering:)
       when 'conflict', 'error'
         raise Error, "適用不能な行が含まれています: row=#{row.sequence_number}, action=#{row.action}"
       else
@@ -113,17 +142,24 @@ module Syllabus
       return existing if existing
 
       Lecture.create!(title: row.source_title, lecturer: row.source_lecturer, faculty: row.source_faculty)
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique
+      concurrent = Lecture.canonical.lock.find_by(normalized_key: row.normalized_key)
+      return concurrent if concurrent
+
+      raise
     end
 
     def ensure_lecture!(row)
-      lecture = Lecture.canonical.find_by(id: row.matched_lecture_id)
+      lecture = Lecture.canonical.lock.find_by(id: row.matched_lecture_id)
       raise Error, "照合済みLectureが見つかりません: #{row.matched_lecture_id}" unless lecture
-      raise Error, "Lectureのnormalized_keyが解析時から変わっています: #{lecture.id}" unless lecture.normalized_key == row.normalized_key
+      validate_lecture_identity!(lecture, row)
 
       lecture
     end
 
     def create_offering!(row, lecture)
+      lecture.lock!
+      validate_lecture_identity!(lecture, row)
       attributes = offering_attributes(row).merge(
         lecture:,
         first_seen_import_run: run,
@@ -135,9 +171,16 @@ module Syllabus
       offering
     end
 
+    def validate_lecture_identity!(lecture, row)
+      return if lecture.merged_into_lecture_id.nil? && row.normalized_key.present? && lecture.normalized_key == row.normalized_key
+
+      raise Error, "Lectureのnormalized_keyが解析時から変わっています: #{lecture.id}"
+    end
+
     def update_offering!(row)
+      lecture = ensure_lecture!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
-      raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == row.matched_lecture_id
+      raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == lecture.id
       ensure_snapshot!(offering, row)
 
       attributes = offering_attributes(row).merge(
@@ -147,11 +190,13 @@ module Syllabus
       )
       offering.update!(attributes)
       replace_slots!(offering, row.after_values.fetch('slots', []))
+      [lecture, offering]
     end
 
     def touch_last_seen!(row)
+      lecture = ensure_lecture!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
-      raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == row.matched_lecture_id
+      raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == lecture.id
       ensure_snapshot!(offering, row)
 
       offering.update_columns(
@@ -160,11 +205,13 @@ module Syllabus
         source_status: 'active',
         missing_since_import_run_id: nil
       )
+      [lecture, offering]
     end
 
     def mark_missing!(row)
+      lecture = ensure_lecture!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
-      raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == row.matched_lecture_id
+      raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == lecture.id
       ensure_snapshot!(offering, row)
 
       offering.update_columns(
@@ -172,6 +219,11 @@ module Syllabus
         missing_since_import_run_id: offering.missing_since_import_run_id || run.id,
         updated_at: operation_time
       )
+      [lecture, offering]
+    end
+
+    def record_applied_result!(row, lecture:, offering: nil)
+      row.update_columns(applied_lecture_id: lecture.id, applied_offering_id: offering&.id)
     end
 
     def ensure_snapshot!(offering, row)
@@ -193,8 +245,11 @@ module Syllabus
 
     def record_failure!(error)
       current_status = run.reload.status
-      if @original_status == 'applied_without_missing' && current_status == 'applied_without_missing'
-        run.update_columns(error_summary: error.message, finished_at: Time.current)
+      if @started_application && @original_status == 'applied_without_missing' && current_status == 'applied_without_missing'
+        SyllabusImportRun.where(id: run.id, status: 'applied_without_missing').update_all(
+          error_summary: error.message,
+          finished_at: Time.current
+        )
       elsif @started_application && !%w[applied_without_missing applied rolled_back].include?(current_status)
         run.update_columns(status: 'failed', error_summary: error.message, finished_at: Time.current)
       end
@@ -217,12 +272,5 @@ module Syllabus
       end
     end
 
-    def domain_counts
-      {
-        reviews: Review.count,
-        bookmarks: Bookmark.count,
-        timetable_entries: defined?(TimetableEntry) && TimetableEntry.table_exists? ? TimetableEntry.count : 0
-      }
-    end
   end
 end

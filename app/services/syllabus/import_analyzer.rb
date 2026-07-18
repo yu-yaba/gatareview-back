@@ -334,6 +334,7 @@ module Syllabus
       seen = plans.filter_map { |plan| plan.dig(:source, :registration_code).presence }.to_set
       context[:offerings].each_value do |offering|
         next if seen.include?(offering.registration_code)
+        next unless context[:organizations].key?(offering.shozoku_code)
 
         source = {
           year: offering.year,
@@ -368,16 +369,30 @@ module Syllabus
       current_counts = plans.reject { |plan| plan[:action] == 'mark_missing' }
                             .group_by { |plan| plan.dig(:source, :faculty) }
                             .transform_values(&:size)
-      previous_run = SyllabusImportRun.applied_to_domain.where(year:).order(applied_at: :desc).first
-      previous_counts = previous_run&.faculty_counts || {}
-      previous_counts.each do |faculty, previous_count|
+      previous_run = SyllabusImportRun.applied_to_domain.where(year:, source_type: 'csv_v2').order(applied_at: :desc).first
+      previous_counts = previous_run&.faculty_counts.presence
+      baseline_counts = previous_counts || current_offering_baseline_counts(context)
+      baseline_counts.each do |faculty, previous_count|
         current_count = current_counts[faculty].to_i
         next if previous_count.to_i.zero?
         next if current_count >= previous_count.to_i * (1 - DROP_THRESHOLD)
 
-        errors << "#{faculty}の件数が前回から20%以上減少しています: #{previous_count} → #{current_count}"
+        baseline_label = previous_counts ? '前回' : '既存DB baseline'
+        errors << "#{faculty}の件数が#{baseline_label}から20%以上減少しています: #{previous_count} → #{current_count}"
       end
       errors
+    end
+
+    def current_offering_baseline_counts(context)
+      enabled_codes = context[:organizations].keys.to_set
+      context[:offerings].values
+                         .select { |offering| offering.active? && enabled_codes.include?(offering.shozoku_code) }
+                         .group_by do |offering|
+        organization = context[:organizations][offering.shozoku_code]
+        Normalizer.text(organization&.faculty_label.presence || offering.source_faculty.presence || offering.lecture.faculty)
+      end
+                         .transform_values(&:size)
+                         .reject { |faculty, _count| faculty.blank? }
     end
 
     def persist_plans!(run, plans)
@@ -422,8 +437,8 @@ module Syllabus
       error_count = plans.count { |plan| plan[:action] == 'error' } + completeness_errors.size
       conflict_count = plans.count { |plan| plan[:action] == 'conflict' }
 
+      staged_payload_version = SyllabusImportRun::STAGED_PAYLOAD_VERSION
       run.update!(
-        status: 'analyzed',
         total_rows: plans.count { |plan| plan[:source_row_number].present? },
         valid_rows: plans.count { |plan| !%w[error conflict mark_missing].include?(plan[:action]) },
         new_lectures_count: plans.count { |plan| %w[create_lecture create_lecture_and_offering].include?(plan[:action]) },
@@ -436,7 +451,11 @@ module Syllabus
         error_count:,
         faculty_counts:,
         error_summary: completeness_errors.presence&.join("\n"),
-        staged_sha256: run.calculated_staged_sha256,
+        staged_payload_version:
+      )
+      run.update!(
+        status: 'analyzed',
+        staged_sha256: run.calculated_staged_sha256(version: staged_payload_version),
         analyzed_at: Time.current,
         finished_at: Time.current
       )

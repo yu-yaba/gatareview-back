@@ -68,6 +68,33 @@ RSpec.describe Syllabus::ImportAnalyzer do
     expect(offering.reload.source_status).to eq('active')
   end
 
+  it '初回runでも既存active Offeringをbaselineにして大幅減少を拒否すること' do
+    5.times do |index|
+      lecture = FactoryBot.create(
+        :lecture,
+        title: "既存講義#{index}",
+        lecturer: "既存教員#{index}",
+        faculty: 'H:人文学部'
+      )
+      LectureOffering.create!(
+        lecture:,
+        year: 2027,
+        registration_code: format('271H9%03d', index),
+        shozoku_code: '01',
+        term_code: 'A'
+      )
+    end
+    path = write_csv('too-small-first-run.csv', [v2_row])
+
+    run = described_class.new(csv_path: path).call.run
+
+    expect(run.error_count).to eq(1)
+    expect(run.error_summary).to match(/既存DB baselineから20%以上減少/)
+    expect(run.syllabus_import_rows.where(action: 'mark_missing').count).to eq(5)
+    expect { Syllabus::ImportApplier.new(import_run_id: run.id, confirm: true, confirm_missing: true).call }
+      .to raise_error(Syllabus::ImportApplier::Error, /適用できないrun/)
+  end
+
   it '類似する既存Lectureがある場合は自動作成せずconflictにすること' do
     FactoryBot.create(:lecture, title: '心理学概論Ａ', lecturer: '別の教員', faculty: 'H:人文学部')
     path = write_csv('conflict.csv', [v2_row])

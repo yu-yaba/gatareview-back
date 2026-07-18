@@ -17,6 +17,8 @@ module Api
 
         review_attributes = review_params
         @review = @lecture.reviews.new(review_attributes)
+        @review.explicit_offering_reference = review_attributes.key?(:lecture_offering_id)
+        @review.suppress_offering_inference = explicitly_clears_offering?(review_attributes)
         @review.user = current_user if current_user
         
         if @review.save
@@ -72,7 +74,11 @@ module Api
           return
         end
         
-        if @review.update(review_params)
+        review_attributes = review_params
+        @review.explicit_offering_reference = review_attributes.key?(:lecture_offering_id)
+        @review.suppress_offering_inference = explicitly_clears_offering?(review_attributes)
+
+        if @review.update(review_attributes)
           review_data = @review.as_json(include: { user: { only: %i[id name avatar_url] } })
           review_data['user_id'] = @review.user_id
           render json: { 
@@ -128,6 +134,10 @@ module Api
         params.require(:review).permit(:rating, :content, :period_year, :period_term, :textbook, :attendance,
                                        :grading_type, :content_difficulty, :content_quality, :academic_year, :term_code,
                                        :lecture_offering_id)
+      end
+
+      def explicitly_clears_offering?(attributes)
+        attributes.key?(:lecture_offering_id) && attributes[:lecture_offering_id].blank?
       end
       
       def recaptcha_verified?

@@ -15,21 +15,24 @@ module Syllabus
     def call
       validate!
       @rollback_status = run.status
-      protected_counts = domain_counts
       restored_rows = 0
 
       SyllabusImportRun.transaction do
         SyllabusImportRun.where(year: run.year).lock.load
         run.lock!
-        validate!
+        rows = run.syllabus_import_rows.order(sequence_number: :desc).lock.to_a
+        validate!(rows:)
         @rollback_status = run.status
 
-        run.syllabus_import_rows.order(sequence_number: :desc).each do |row|
+        rows.each do |row|
           rollback_row!(row)
           restored_rows += 1
         end
 
-        raise Error, 'Review・Bookmark・TimetableEntryの件数がrollback中に変化しました' unless domain_counts == protected_counts
+        offering_ids = rows.filter_map { |row| applied_offering_id(row) }
+        unless DomainReferenceIntegrity.valid_for_offerings?(offering_ids)
+          raise Error, 'Review・TimetableEntryと対象Offeringの参照整合性がrollback中に崩れました'
+        end
 
         run.update!(status: 'rolled_back', rolled_back_at: now, finished_at: now)
       end
@@ -45,9 +48,16 @@ module Syllabus
 
     attr_reader :run, :confirm, :now
 
-    def validate!
+    def validate!(rows: nil)
       raise Error, 'CONFIRM=true が必要です' unless confirm
       raise Error, "rollbackできないrunです: status=#{run.status}" unless run.applied_to_domain?
+      unless run.staged_sha256.present? && run.calculated_staged_sha256(rows:) == run.staged_sha256
+        raise Error, '解析結果のハッシュが一致しないためrollbackできません'
+      end
+      if run.staged_payload_version.to_i >= SyllabusImportRun::STAGED_PAYLOAD_VERSION &&
+         (run.applied_result_sha256.blank? || run.calculated_applied_result_sha256(rows:) != run.applied_result_sha256)
+        raise Error, '適用結果のハッシュが一致しないためrollbackできません'
+      end
 
       later_run = SyllabusImportRun.applied_to_domain.where(year: run.year).where('applied_at > ?', run.applied_at).exists?
       raise Error, '同年度に後続の適用済みrunがあるためrollbackできません' if later_run
@@ -67,7 +77,7 @@ module Syllabus
     end
 
     def destroy_created_offering!(row)
-      offering = LectureOffering.lock.find_by(id: row.matched_offering_id)
+      offering = LectureOffering.lock.find_by(id: applied_offering_id(row))
       return unless offering
 
       ensure_applied_snapshot!(offering, row)
@@ -88,8 +98,9 @@ module Syllabus
     def restore_offering!(row)
       return if row.before_values.blank?
 
-      offering = LectureOffering.lock.find_by(id: row.matched_offering_id)
-      raise Error, "復元対象Offeringが見つかりません: #{row.matched_offering_id}" unless offering
+      offering_id = applied_offering_id(row)
+      offering = LectureOffering.lock.find_by(id: offering_id)
+      raise Error, "復元対象Offeringが見つかりません: #{offering_id}" unless offering
       ensure_applied_snapshot!(offering, row)
 
       values = row.before_values.deep_dup
@@ -120,7 +131,7 @@ module Syllabus
                  before.deep_dup
                end
 
-      values['lecture_id'] = row.matched_lecture_id
+      values['lecture_id'] = applied_lecture_id(row)
       case row.action
       when 'create_offering', 'create_lecture_and_offering'
         values['first_seen_import_run_id'] = run.id
@@ -142,12 +153,12 @@ module Syllabus
       values
     end
 
-    def domain_counts
-      {
-        reviews: Review.count,
-        bookmarks: Bookmark.count,
-        timetable_entries: defined?(TimetableEntry) && TimetableEntry.table_exists? ? TimetableEntry.count : 0
-      }
+    def applied_lecture_id(row)
+      row.applied_lecture_id || row.matched_lecture_id
+    end
+
+    def applied_offering_id(row)
+      row.applied_offering_id || row.matched_offering_id
     end
   end
 end

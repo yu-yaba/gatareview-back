@@ -16,6 +16,8 @@ class SyllabusImportRow < ApplicationRecord
   belongs_to :syllabus_import_run
   belongs_to :matched_lecture, class_name: 'Lecture', optional: true
   belongs_to :matched_offering, class_name: 'LectureOffering', optional: true
+  belongs_to :applied_lecture, class_name: 'Lecture', optional: true
+  belongs_to :applied_offering, class_name: 'LectureOffering', optional: true
 
   validates :sequence_number, presence: true, uniqueness: { scope: :syllabus_import_run_id }
   validates :action, inclusion: { in: ACTIONS }
