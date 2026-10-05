@@ -140,6 +140,10 @@ http://localhost:3000
 
 production では `DATABASE_URL` を唯一の DB 接続設定として使います。`JAWSDB_URL` や `HEROKU_DB_*` のような旧設定は参照しません。
 
+本番 MySQL 接続は `ssl_mode: verify_identity` を指定し、暗号化と証明書・ホスト名の検証を必須にします。Aiven など独自 CA を使う場合は、提供元の CA 証明書を実行環境に配置し、`MYSQL_SSL_CA` に読み取り可能な絶対パスを指定してください。未設定時はシステムの CA を使います。URL の `ssl_mode` で検証を弱める設定や、存在しない CA パスは起動時に拒否します。`ssl-mode` は mysql2 の設定名として認識されません。
+
+デプロイ前に実行環境の接続で `SHOW SESSION STATUS LIKE 'Ssl_cipher'` が空でないことと、誤った CA またはホスト名では接続が失敗することを確認してください。CA が未配置・未検証のまま本番へ反映すると DB 接続に失敗します。
+
 `site_settings` は環境変数ではなく DB テーブルです。review access を本番で使う場合は env 追加とは別に migration 実行が必要です。
 
 JawsDB から Aiven for MySQL へ切り替えるときの実行手順は [docs/aiven-migration-runbook.md](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/aiven-migration-runbook.md) を参照してください。

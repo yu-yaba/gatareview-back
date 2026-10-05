@@ -47,7 +47,7 @@ module Api
         end
 
         def review_access_params
-          params.require(:review_access).permit(:lecture_review_restriction_enabled)
+          params.expect(review_access: [:lecture_review_restriction_enabled])
         end
 
         def render_invalid_value

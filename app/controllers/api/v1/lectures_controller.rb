@@ -156,7 +156,7 @@ module Api
       private
 
       def lecture_params
-        params.require(:lecture).permit(:title, :lecturer, :faculty)
+        params.expect(lecture: %i[title lecturer faculty])
       end
 
       def require_admin_privileges

@@ -27,3 +27,5 @@ test:
 production:
   <<: *default
   url: <%= ENV['DATABASE_URL'] %>
+  ssl_mode: verify_identity
+  sslca: <%= ENV['MYSQL_SSL_CA'].to_s.empty? ? 'null' : ENV['MYSQL_SSL_CA'].inspect %>

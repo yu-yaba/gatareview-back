@@ -35,7 +35,8 @@ class RecaptchaVerifier
 
     response = HTTParty.post(
       'https://www.google.com/recaptcha/api/siteverify',
-      body: body
+      body: body,
+      timeout: 10
     )
 
     result = JSON.parse(response.body)

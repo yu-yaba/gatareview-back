@@ -36,7 +36,8 @@ RSpec.describe RecaptchaVerifier do
     expect(verifier.hostname).to eq('www.gatareview.com')
     expect(HTTParty).to have_received(:post).with(
       'https://www.google.com/recaptcha/api/siteverify',
-      body: hash_including(remoteip: '203.0.113.10')
+      body: hash_including(remoteip: '203.0.113.10'),
+      timeout: 10
     )
   end
 
@@ -45,5 +46,13 @@ RSpec.describe RecaptchaVerifier do
     verifier = described_class.new('token', 'submit', 0.5, allowed_hostnames: ['www.gatareview.com'])
 
     expect(verifier.verify).to be(false)
+  end
+
+  it 'limits the external request and fails closed on a timeout' do
+    allow(HTTParty).to receive(:post).with(
+      'https://www.google.com/recaptcha/api/siteverify', body: anything, timeout: 10
+    ).and_raise(Net::ReadTimeout)
+
+    expect(described_class.new('test-token').verify).to be(false)
   end
 end

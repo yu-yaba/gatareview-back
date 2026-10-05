@@ -37,9 +37,7 @@ module Api
       end
 
       def reviews
-        page = params[:page]&.to_i || 1
-        per_page = params[:per_page]&.to_i || 10
-        per_page = [per_page, 50].min # 最大50件まで制限
+        page, per_page = pagination_parameters
         
         # ユーザーのレビュー一覧をページネーション付きで取得
         reviews = current_user.reviews
@@ -85,20 +83,13 @@ module Api
         
         render json: {
           reviews: reviews_data,
-          pagination: {
-            current_page: page,
-            total_pages: total_pages,
-            total_count: total_count,
-            per_page: per_page
-          },
+          pagination: pagination_payload(page, per_page, total_count, total_pages),
           statistics: statistics
         }
       end
 
       def bookmarks
-        page = params[:page]&.to_i || 1
-        per_page = params[:per_page]&.to_i || 10
-        per_page = [per_page, 50].min # 最大50件まで制限
+        page, per_page = pagination_parameters
         
         # N+1クエリ問題を解決: レビュー数と平均評価を一括取得
         bookmarks = current_user.bookmarks
@@ -142,17 +133,24 @@ module Api
         
         render json: {
           bookmarks: bookmarks_data,
-          pagination: {
-            current_page: page,
-            total_pages: total_pages,
-            total_count: total_count,
-            per_page: per_page
-          },
+          pagination: pagination_payload(page, per_page, total_count, total_pages),
           statistics: statistics
         }
       end
 
       private
+
+      def pagination_parameters
+        page, per_page = { page: 1, per_page: 10 }.map do |key, fallback|
+          value = params[key].to_s
+          value.match?(/\A[1-9]\d{0,8}\z/) ? value.to_i : fallback
+        end
+        [page, [per_page, 50].min]
+      end
+
+      def pagination_payload(page, per_page, total_count, total_pages)
+        { current_page: page, total_pages: total_pages, total_count: total_count, per_page: per_page }
+      end
 
       def calculate_statistics
         # 投稿したレビュー数

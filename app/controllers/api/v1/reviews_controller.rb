@@ -131,9 +131,8 @@ module Api
       end
 
       def review_params
-        params.require(:review).permit(:rating, :content, :period_year, :period_term, :textbook, :attendance,
-                                       :grading_type, :content_difficulty, :content_quality, :academic_year, :term_code,
-                                       :lecture_offering_id)
+        params.expect(review: %i[rating content period_year period_term textbook attendance grading_type
+                                 content_difficulty content_quality academic_year term_code lecture_offering_id])
       end
 
       def explicitly_clears_offering?(attributes)
@@ -152,7 +151,7 @@ module Api
         
         return false if params[:token].blank?
 
-        verifier = RecaptchaVerifier.new(params[:token], 'submit', 0.5, remote_ip: request.remote_ip)
+        verifier = RecaptchaVerifier.new(params[:token], 'submit', 0.5, remote_ip: RateLimitDiscriminator.client_ip(request))
         verifier.verify
       end
 

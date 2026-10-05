@@ -19,6 +19,14 @@ class Review < ApplicationRecord
     '集中' => '4'
   }.freeze
 
+  DETAIL_OPTIONS = {
+    textbook: %w[必要 不要 どちらでも その他・不明],
+    attendance: %w[毎回確認 たまに確認 なし その他・不明],
+    grading_type: %w[テストのみ レポートのみ テスト,レポート その他・不明],
+    content_difficulty: %w[とても楽 楽 普通 難 とても難しい],
+    content_quality: %w[とても良い 良い 普通 悪い とても悪い]
+  }.freeze
+
   belongs_to :lecture
   belongs_to :lecture_reference, class_name: 'Lecture', foreign_key: :lecture_id_bigint, optional: true
   belongs_to :lecture_offering, optional: true
@@ -33,8 +41,18 @@ class Review < ApplicationRecord
   before_validation :lock_offering_for_reference
   before_validation :populate_references_from_offering
 
-  validates :rating, presence: true
-  validates :content, presence: true, length: { maximum: 1000 }
+  validates :rating, presence: true, numericality: true
+  validates :rating, numericality: { greater_than_or_equal_to: 0.5, less_than_or_equal_to: 5 },
+                     if: -> { new_record? || will_save_change_to_rating? }
+  validate :rating_uses_half_star_steps, if: -> { new_record? || will_save_change_to_rating? }
+  validates :content, presence: true
+  validates :content, length: { in: 30..1000 }, if: -> { new_record? || will_save_change_to_content? }
+
+  # Preserve untouched legacy values while enforcing the current form choices on new input.
+  DETAIL_OPTIONS.each do |attribute, values|
+    validates attribute, inclusion: { in: values }, allow_blank: true,
+                         if: -> { new_record? || will_save_change_to_attribute?(attribute) }
+  end
 
   validates :user_id, uniqueness: { scope: :lecture_id, allow_nil: true, message: 'は同じ講義に複数のレビューを投稿できません' }
   validates :academic_year, inclusion: { in: 2000..2100 }, allow_nil: true
@@ -42,6 +60,13 @@ class Review < ApplicationRecord
   validate :offering_matches_lecture
 
   private
+
+  def rating_uses_half_star_steps
+    return unless rating&.finite? && rating.between?(0.5, 5)
+    return if rating * 2 == (rating * 2).to_i
+
+    errors.add(:rating, 'は0.5刻みで入力してください')
+  end
 
   def populate_syllabus_references
     self.lecture_id_bigint = Integer(lecture_id, 10) if lecture_id.present? && lecture_id.to_s.match?(/\A\d+\z/)

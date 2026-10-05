@@ -56,6 +56,39 @@ RSpec.describe 'Api::V1::Auth', type: :request do
         expect(response).to have_http_status(:unauthorized)
       end
     end
+
+    it 'updates the verified email and removes privileges tied to the old email' do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('ADMIN_EMAILS', '').and_return('retired-admin@example.test')
+      allow(ENV).to receive(:fetch).with('ADMIN_EMAIL', nil).and_return(nil)
+      existing_user = create(:user, email: 'retired-admin@example.test', provider_id: google_info.fetch('sub'))
+      old_headers = { 'Authorization' => "Bearer #{JsonWebToken.encode(existing_user.jwt_payload)}" }
+
+      post '/api/v1/auth/google', params: { token: 'test-google-id-token' }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.fetch('user')).to include(
+        'id' => existing_user.id, 'email' => google_info.fetch('email'), 'admin' => false
+      )
+      expect(existing_user.reload.email).to eq(google_info.fetch('email'))
+
+      get '/api/v1/admin/review-access', headers: old_headers
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it 'fails closed on an email collision without merging or changing either account' do
+      existing_user = create(:user, email: 'old-email@example.test', provider_id: google_info.fetch('sub'))
+      other_user = create(:user, email: google_info.fetch('email'), provider_id: 'another-google-subject')
+      original_accounts = [existing_user.attributes, other_user.attributes]
+
+      expect do
+        post '/api/v1/auth/google', params: { token: 'test-google-id-token' }, as: :json
+      end.not_to change(User, :count)
+
+      expect(response).to have_http_status(:internal_server_error)
+      expect(response.parsed_body).not_to have_key('token')
+      expect([existing_user.reload.attributes, other_user.reload.attributes]).to eq(original_accounts)
+    end
   end
 
   describe 'POST /api/v1/auth/logout' do

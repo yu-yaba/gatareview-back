@@ -19,8 +19,9 @@ class User < ApplicationRecord
       user = where(provider: 'google', provider_id: google_user_info['sub']).lock.first
 
       if user
-        # 既存ユーザーの情報更新（名前やアバターが変更されている可能性）
+        # Keep email-based privileges aligned with Google's verified identity.
         user.update!(
+          email: google_user_info['email'],
           name: google_user_info['name'],
           avatar_url: google_user_info['picture']
         )

@@ -8,11 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:8.0.33
+        image: container-registry.oracle.com/mysql/community-server:8.4.12
         ports:
           - "3306:3306"
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_ROOT_HOST: "%"
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot --silent"
           --health-interval=5s

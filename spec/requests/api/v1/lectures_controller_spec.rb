@@ -344,6 +344,30 @@ RSpec.describe Api::V1::LecturesController, type: :request do
       allow(AuthorizeApiRequest).to receive(:call).and_return({ result: admin_user })
     end
 
+    ['invalid lecture shape', [{ title: '不正な配列', lecturer: '講師', faculty: '学部' }]].each do |invalid_lecture|
+      it 'オブジェクト以外の講義入力を400で拒否すること' do
+        expect do
+          post '/api/v1/lectures', params: { lecture: invalid_lecture }, as: :json
+        end.not_to change(Lecture, :count)
+
+        expect(response).to have_http_status(:bad_request)
+      end
+
+      it '不正な入力でも未認証なら先に401で拒否すること' do
+        allow(AuthorizeApiRequest).to receive(:call).and_return({ result: nil })
+        post '/api/v1/lectures', params: { lecture: invalid_lecture }, as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it '不正な入力でも非管理者なら先に403で拒否すること' do
+        allow(AuthorizeApiRequest).to receive(:call).and_return({ result: FactoryBot.create(:user) })
+        post '/api/v1/lectures', params: { lecture: invalid_lecture }, as: :json
+
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
     context '有効なパラメータの場合' do
       it '講義を作成できること' do
         expect do
