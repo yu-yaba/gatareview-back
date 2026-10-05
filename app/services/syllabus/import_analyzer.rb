@@ -90,7 +90,11 @@ module Syllabus
 
       years = rows.filter_map { |row| integer_year(row[3]) }.uniq
       raise Error, 'CSV内の年度が不正または複数です' unless years.one? && rows.all? { |row| integer_year(row[3]) == years.first }
-      raise Error, "YEARとCSV内年度が一致しません: #{requested_year} / #{years.first}" if requested_year.present? && integer_year(requested_year) != years.first
+
+      if requested_year.present? && integer_year(requested_year) != years.first
+        raise Error,
+              "YEARとCSV内年度が一致しません: #{requested_year} / #{years.first}"
+      end
 
       years.first
     end
@@ -122,7 +126,8 @@ module Syllabus
       lecturer_faculty = Hash.new { |hash, key| hash[key] = [] }
 
       lectures.each do |lecture|
-        key = lecture.normalized_key.presence || Normalizer.lecture_key(title: lecture.title, lecturer: lecture.lecturer, faculty: lecture.faculty)
+        key = lecture.normalized_key.presence || Normalizer.lecture_key(title: lecture.title, lecturer: lecture.lecturer,
+                                                                        faculty: lecture.faculty)
         lecture_keys[key] << lecture
         title_faculty[[Normalizer.title(lecture.title), Normalizer.faculty(lecture.faculty)]] << lecture
         lecturer_faculty[[Normalizer.lecturer(lecture.lecturer), Normalizer.faculty(lecture.faculty)]] << lecture
@@ -291,7 +296,9 @@ module Syllabus
         'first_seen_import_run_id' => offering.first_seen_import_run_id,
         'last_seen_import_run_id' => offering.last_seen_import_run_id,
         'missing_since_import_run_id' => offering.missing_since_import_run_id,
-        'slots' => offering.offering_slots.sort_by { |slot| [slot.day, slot.period] }.map { |slot| { 'day' => slot.day, 'period' => slot.period } }
+        'slots' => offering.offering_slots.sort_by do |slot|
+          [slot.day, slot.period]
+        end.map { |slot| { 'day' => slot.day, 'period' => slot.period } }
       }
     end
 
@@ -305,7 +312,8 @@ module Syllabus
       build_plan(row_number:, source:, action: 'error', messages:)
     end
 
-    def build_plan(row_number:, source:, action:, messages: [], matched_lecture: nil, matched_offering: nil, before_values: nil, after_values: nil)
+    def build_plan(row_number:, source:, action:, messages: [], matched_lecture: nil, matched_offering: nil, before_values: nil,
+                   after_values: nil)
       {
         source_row_number: row_number,
         source:,

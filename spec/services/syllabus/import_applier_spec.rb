@@ -6,7 +6,10 @@ require 'tmpdir'
 
 RSpec.describe Syllabus::ImportApplier do
   around do |example|
-    Dir.mktmpdir { |directory| @directory = directory; example.run }
+    Dir.mktmpdir do |directory|
+      @directory = directory
+      example.run
+    end
   end
 
   before do

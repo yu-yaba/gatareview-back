@@ -49,9 +49,12 @@ class SyllabusImportRun < ApplicationRecord
   SOURCE_TYPES = %w[csv_v2 legacy_csv].freeze
 
   has_many :syllabus_import_rows, dependent: :destroy
-  has_many :first_seen_offerings, class_name: 'LectureOffering', foreign_key: :first_seen_import_run_id, dependent: :nullify, inverse_of: :first_seen_import_run
-  has_many :last_seen_offerings, class_name: 'LectureOffering', foreign_key: :last_seen_import_run_id, dependent: :nullify, inverse_of: :last_seen_import_run
-  has_many :missing_since_offerings, class_name: 'LectureOffering', foreign_key: :missing_since_import_run_id, dependent: :nullify, inverse_of: :missing_since_import_run
+  has_many :first_seen_offerings, class_name: 'LectureOffering', foreign_key: :first_seen_import_run_id, dependent: :nullify,
+                                  inverse_of: :first_seen_import_run
+  has_many :last_seen_offerings, class_name: 'LectureOffering', foreign_key: :last_seen_import_run_id, dependent: :nullify,
+                                 inverse_of: :last_seen_import_run
+  has_many :missing_since_offerings, class_name: 'LectureOffering', foreign_key: :missing_since_import_run_id, dependent: :nullify,
+                                     inverse_of: :missing_since_import_run
 
   validates :year, presence: true, inclusion: { in: 2000..2100 }
   validates :source_type, inclusion: { in: SOURCE_TYPES }

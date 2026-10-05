@@ -31,7 +31,9 @@ module Syllabus
     Result = Struct.new(:path, :row_count, :faculty_counts, keyword_init: true)
     ParsedSearchPage = Struct.new(:rows, :flow_execution_key, :total_count, :over_limit, :no_results, keyword_init: true)
 
-    def initialize(year:, output_dir: Rails.root, client: CampusSquareClient.new, timestamp: Time.current, sleeper: ->(seconds) { sleep(seconds) })
+    def initialize(year:, output_dir: Rails.root, client: CampusSquareClient.new, timestamp: Time.current, sleeper: lambda { |seconds|
+      sleep(seconds)
+    })
       @year = year.to_s
       @output_dir = Pathname.new(output_dir.to_s)
       @client = client
@@ -51,7 +53,10 @@ module Syllabus
       normalized_rows = rows
                         .map { |row| normalize_row(row) }
                         .uniq
-                        .sort_by { |title, lecturer, faculty, _year, registration_code, *_| [faculty_order.fetch(faculty), title, lecturer, registration_code] }
+                        .sort_by do |title, lecturer, faculty, _year, registration_code, *_|
+        [faculty_order.fetch(faculty), title, lecturer,
+         registration_code]
+      end
       faculty_counts = build_faculty_counts(normalized_rows)
 
       path = write_csv(normalized_rows)

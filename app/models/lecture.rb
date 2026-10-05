@@ -12,9 +12,7 @@ class Lecture < ApplicationRecord
 
   # シラバスリンク・曜限バッジ表示の代表として使う最新年度の開講
   def latest_offering
-    if association(:lecture_offerings).loaded?
-      return lecture_offerings.select(&:active?).max_by(&:year)
-    end
+    return lecture_offerings.select(&:active?).max_by(&:year) if association(:lecture_offerings).loaded?
 
     lecture_offerings.active.order(year: :desc).first
   end
@@ -53,8 +51,8 @@ class Lecture < ApplicationRecord
     sanitized_query = "%#{sanitize_sql_like(query.to_s)}%"
     alias_lecture_ids = LectureAlias.where('title LIKE ? OR lecturer LIKE ?', sanitized_query, sanitized_query).select(:lecture_id)
     offering_lecture_ids = LectureOffering.active
-                                            .where('source_title LIKE ? OR source_lecturer LIKE ?', sanitized_query, sanitized_query)
-                                            .select(:lecture_id)
+                                          .where('source_title LIKE ? OR source_lecturer LIKE ?', sanitized_query, sanitized_query)
+                                          .select(:lecture_id)
 
     where('lectures.title LIKE :query OR lectures.lecturer LIKE :query', query: sanitized_query)
       .or(where(id: alias_lecture_ids))

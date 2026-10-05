@@ -3,13 +3,13 @@
 require 'rails_helper'
 
 RSpec.describe Syllabus::OfferingSnapshot do
-  def captured_sql
+  def captured_sql(&block)
     statements = []
     subscriber = lambda do |_name, _started, _finished, _unique_id, payload|
       statements << payload[:sql] unless payload[:name] == 'SCHEMA'
     end
 
-    ActiveSupport::Notifications.subscribed(subscriber, 'sql.active_record') { yield }
+    ActiveSupport::Notifications.subscribed(subscriber, 'sql.active_record', &block)
     statements
   end
 

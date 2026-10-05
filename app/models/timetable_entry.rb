@@ -15,7 +15,7 @@ class TimetableEntry < ApplicationRecord
   validate :offering_matches_entry
 
   def intensive?
-    term == 0
+    term&.zero? || false
   end
 
   private

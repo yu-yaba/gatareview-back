@@ -30,9 +30,7 @@ module Syllabus
         end
 
         offering_ids = rows.filter_map { |row| applied_offering_id(row) }
-        unless DomainReferenceIntegrity.valid_for_offerings?(offering_ids)
-          raise Error, 'Review・TimetableEntryと対象Offeringの参照整合性がrollback中に崩れました'
-        end
+        raise Error, 'Review・TimetableEntryと対象Offeringの参照整合性がrollback中に崩れました' unless DomainReferenceIntegrity.valid_for_offerings?(offering_ids)
 
         run.update!(status: 'rolled_back', rolled_back_at: now, finished_at: now)
       end
@@ -101,16 +99,17 @@ module Syllabus
       offering_id = applied_offering_id(row)
       offering = LectureOffering.lock.find_by(id: offering_id)
       raise Error, "復元対象Offeringが見つかりません: #{offering_id}" unless offering
+
       ensure_applied_snapshot!(offering, row)
 
       values = row.before_values.deep_dup
       slots = values.delete('slots') || []
       offering.update!(values.slice(
-        'lecture_id', 'year', 'registration_code', 'shozoku_code', 'syllabus_organization_id',
-        'semester_label', 'term_label', 'term_code', 'source_title', 'source_lecturer',
-        'source_faculty', 'raw_day_periods', 'schedule_kind', 'source_status', 'source_checksum',
-        'first_seen_import_run_id', 'last_seen_import_run_id', 'missing_since_import_run_id'
-      ))
+                         'lecture_id', 'year', 'registration_code', 'shozoku_code', 'syllabus_organization_id',
+                         'semester_label', 'term_label', 'term_code', 'source_title', 'source_lecturer',
+                         'source_faculty', 'raw_day_periods', 'schedule_kind', 'source_status', 'source_checksum',
+                         'first_seen_import_run_id', 'last_seen_import_run_id', 'missing_since_import_run_id'
+                       ))
       offering.offering_slots.delete_all
       slots.each { |slot| offering.offering_slots.create!(day: slot.fetch('day'), period: slot.fetch('period')) }
     end
@@ -119,7 +118,7 @@ module Syllabus
       return if OfferingSnapshot.matches_for_update?(offering, expected_applied_snapshot(row))
 
       raise Error,
-            "Offeringがrun適用後から変更されているためrollbackできません: " \
+            'Offeringがrun適用後から変更されているためrollbackできません: ' \
             "row=#{row.sequence_number}, offering=#{offering.id}"
     end
 

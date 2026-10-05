@@ -106,7 +106,9 @@ RSpec.describe Syllabus::LectureCsvImporter do
     )
     result = described_class.new(csv_path: updated_path).call
 
-    expect(LectureOffering.find_by!(year: 2026, registration_code: '261H2001')).to have_attributes(id: offering.id, term_code: 'B', semester_label: '第2学期')
+    expect(LectureOffering.find_by!(year: 2026,
+                                    registration_code: '261H2001')).to have_attributes(id: offering.id,
+                                                                                       term_code: 'B', semester_label: '第2学期')
     expect(offering.reload.offering_slots.pluck(:day, :period)).to eq([[2, 3]])
     expect(result.inserted_count).to eq(0)
     expect(result.matched_existing_lecture_count).to eq(1)

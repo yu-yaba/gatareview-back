@@ -69,12 +69,8 @@ module Api
           end
         end
 
-        if offering_invalid
-          return render json: { success: false, errors: ['開講情報が講義または年度と一致しません'] }, status: :unprocessable_entity
-        end
-        if conflicts_for_response
-          return render_conflicts(conflicts_for_response, state_changed: conflict_state_changed)
-        end
+        return render json: { success: false, errors: ['開講情報が講義または年度と一致しません'] }, status: :unprocessable_entity if offering_invalid
+        return render_conflicts(conflicts_for_response, state_changed: conflict_state_changed) if conflicts_for_response
 
         render json: { success: true, message: '時間割に追加しました', entries: serialize_entries(entries) }, status: :created
       rescue ActiveRecord::RecordInvalid => e

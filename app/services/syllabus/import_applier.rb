@@ -43,9 +43,7 @@ module Syllabus
         end
 
         offering_ids = rows.filter_map { |row| row.applied_offering_id || row.matched_offering_id }
-        unless DomainReferenceIntegrity.valid_for_offerings?(offering_ids)
-          raise Error, 'Review・TimetableEntryと対象Offeringの参照整合性が適用中に崩れました'
-        end
+        raise Error, 'Review・TimetableEntryと対象Offeringの参照整合性が適用中に崩れました' unless DomainReferenceIntegrity.valid_for_offerings?(offering_ids)
 
         final_status = skipped_missing_rows.positive? ? 'applied_without_missing' : 'applied'
         run.update!(
@@ -67,17 +65,12 @@ module Syllabus
 
     private
 
-    attr_reader :run, :confirm, :confirm_missing, :clock, :operation_time
-
-    def completing_missing
-      @completing_missing
-    end
+    attr_reader :run, :confirm, :confirm_missing, :clock, :operation_time, :completing_missing
 
     def validate!(rows: nil)
       raise Error, 'CONFIRM=true が必要です' unless confirm
-      unless run.applicable? || (run.missing_completion_pending? && confirm_missing)
-        raise Error, "適用できないrunです: status=#{run.status}"
-      end
+      raise Error, "適用できないrunです: status=#{run.status}" unless run.applicable? || (run.missing_completion_pending? && confirm_missing)
+
       if run.staged_payload_version.to_i < SyllabusImportRun::STAGED_PAYLOAD_VERSION
         message = if run.missing_completion_pending?
                     '旧形式で未掲載差分を保留したrunは完了できません。' \
@@ -87,9 +80,7 @@ module Syllabus
                   end
         raise Error, message
       end
-      unless run.staged_sha256.present? && run.calculated_staged_sha256(rows:) == run.staged_sha256
-        raise Error, '解析結果のハッシュが一致しません'
-      end
+      raise Error, '解析結果のハッシュが一致しません' unless run.staged_sha256.present? && run.calculated_staged_sha256(rows:) == run.staged_sha256
       if run.staged_payload_version.to_i >= SyllabusImportRun::STAGED_PAYLOAD_VERSION &&
          run.missing_completion_pending? &&
          (run.applied_result_sha256.blank? || run.calculated_applied_result_sha256(rows:) != run.applied_result_sha256)
@@ -152,6 +143,7 @@ module Syllabus
     def ensure_lecture!(row)
       lecture = Lecture.canonical.lock.find_by(id: row.matched_lecture_id)
       raise Error, "照合済みLectureが見つかりません: #{row.matched_lecture_id}" unless lecture
+
       validate_lecture_identity!(lecture, row)
 
       lecture
@@ -181,6 +173,7 @@ module Syllabus
       lecture = ensure_lecture!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
       raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == lecture.id
+
       ensure_snapshot!(offering, row)
 
       attributes = offering_attributes(row).merge(
@@ -197,6 +190,7 @@ module Syllabus
       lecture = ensure_lecture!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
       raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == lecture.id
+
       ensure_snapshot!(offering, row)
 
       offering.update_columns(
@@ -212,6 +206,7 @@ module Syllabus
       lecture = ensure_lecture!(row)
       offering = LectureOffering.lock.find(row.matched_offering_id)
       raise Error, "既存Offeringのlecture_idが解析時から変わっています: #{offering.id}" unless offering.lecture_id == lecture.id
+
       ensure_snapshot!(offering, row)
 
       offering.update_columns(
@@ -230,7 +225,7 @@ module Syllabus
       return if OfferingSnapshot.matches_for_update?(offering, row.before_values)
 
       raise Error,
-            "Offeringが解析時から変更されているため再解析が必要です: " \
+            'Offeringが解析時から変更されているため再解析が必要です: ' \
             "row=#{row.sequence_number}, offering=#{offering.id}"
     end
 
@@ -271,6 +266,5 @@ module Syllabus
         offering.offering_slots.create!(day: slot.fetch('day'), period: slot.fetch('period'))
       end
     end
-
   end
 end

@@ -36,9 +36,7 @@ module Syllabus
     end
 
     def capture_for_update(offering)
-      unless OfferingSlot.connection.transaction_open?
-        raise ArgumentError, 'OfferingSlotのsnapshot lockはtransaction内で実行してください'
-      end
+      raise ArgumentError, 'OfferingSlotのsnapshot lockはtransaction内で実行してください' unless OfferingSlot.connection.transaction_open?
 
       capture_with_slots(offering, slot_values(offering, lock: true))
     end

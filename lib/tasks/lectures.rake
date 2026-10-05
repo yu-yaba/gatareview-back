@@ -30,9 +30,10 @@ namespace :lectures do
     puts "Status: #{run.status}"
     puts "Rows: #{run.total_rows}, valid=#{run.valid_rows}, errors=#{run.error_count}, conflicts=#{run.conflict_count}"
     puts "Lectures: new=#{run.new_lectures_count}"
-    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
+    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, " \
+         "unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
     puts "Run `bundle exec rake lectures:syllabus_report IMPORT_RUN_ID=#{run.id}` to inspect details."
-    puts "No Lecture, Offering, Review, Bookmark, or TimetableEntry was changed."
+    puts 'No Lecture, Offering, Review, Bookmark, or TimetableEntry was changed.'
   rescue ArgumentError, Syllabus::ImportAnalyzer::Error => e
     warn e.message
     exit 1
@@ -46,7 +47,8 @@ namespace :lectures do
     puts "Year: #{run.year}, status=#{run.status}, source=#{run.source_type}"
     puts "Rows: total=#{run.total_rows}, valid=#{run.valid_rows}, errors=#{run.error_count}, conflicts=#{run.conflict_count}"
     puts "Lectures: new=#{run.new_lectures_count}"
-    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
+    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, " \
+         "unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
     puts run.error_summary if run.error_summary.present?
   rescue ArgumentError, Syllabus::ImportAnalyzer::Error => e
     warn e.message
@@ -63,9 +65,7 @@ namespace :lectures do
     puts "Import run #{result.run.id}: status=#{result.run.status}"
     puts "Rows applied: #{result.applied_rows}"
     puts "Missing rows skipped: #{result.skipped_missing_rows}"
-    if result.run.missing_completion_pending?
-      puts "未掲載差分を確認後、同じIMPORT_RUN_IDにCONFIRM_MISSING=trueを付けて再実行してください。"
-    end
+    puts '未掲載差分を確認後、同じIMPORT_RUN_IDにCONFIRM_MISSING=trueを付けて再実行してください。' if result.run.missing_completion_pending?
   rescue KeyError, ActiveRecord::RecordNotFound, Syllabus::ImportApplier::Error => e
     warn e.message
     exit 1
@@ -90,11 +90,13 @@ namespace :lectures do
     puts "Run #{run.id}: year=#{run.year}, status=#{run.status}, source=#{run.source_file_name}"
     puts "Rows: total=#{run.total_rows}, valid=#{run.valid_rows}, errors=#{run.error_count}, conflicts=#{run.conflict_count}"
     puts "Lectures: new=#{run.new_lectures_count}"
-    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
+    puts "Offerings: new=#{run.new_offerings_count}, updated=#{run.updated_offerings_count}, " \
+         "unchanged=#{run.unchanged_offerings_count}, missing=#{run.missing_offerings_count}"
     puts "Faculty counts: #{run.faculty_counts.to_json}"
     puts run.error_summary if run.error_summary.present?
     run.syllabus_import_rows.where(action: %w[conflict error]).order(:sequence_number).find_each do |row|
-      puts "sequence=#{row.sequence_number}, source_row=#{row.source_row_number || '-'}, action=#{row.action}, code=#{row.registration_code}, messages=#{Array(row.messages).join(' / ')}"
+      puts "sequence=#{row.sequence_number}, source_row=#{row.source_row_number || '-'}, " \
+           "action=#{row.action}, code=#{row.registration_code}, messages=#{Array(row.messages).join(' / ')}"
     end
   rescue KeyError, ActiveRecord::RecordNotFound => e
     warn e.message
@@ -138,7 +140,8 @@ namespace :lectures do
                                            .where.not(id: OfferingSlot.select(:lecture_offering_id))
                                            .count
       status_counts = LectureOffering.where(year:).group(:source_status).count
-      puts "#{year}: offerings=#{offering_count}, active=#{status_counts['active'].to_i}, missing=#{status_counts['missing'].to_i}, slots=#{slot_count}, offerings_without_slots=#{without_slots_count}"
+      puts "#{year}: offerings=#{offering_count}, active=#{status_counts['active'].to_i}, missing=#{status_counts['missing'].to_i}, " \
+           "slots=#{slot_count}, offerings_without_slots=#{without_slots_count}"
     end
   end
 end

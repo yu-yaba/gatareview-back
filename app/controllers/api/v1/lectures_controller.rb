@@ -263,7 +263,9 @@ module Api
         filtered = filtered.where(lecture_offering_details: { campus: params[:campus] }) if params[:campus].present?
         filtered = filtered.where(lecture_offering_details: { language: params[:language] }) if params[:language].present?
         filtered = filtered.where(lecture_offering_details: { delivery_method: params[:delivery_method] }) if params[:delivery_method].present?
-        filtered = filtered.where(lecture_offering_details: { subject_category: params[:subject_category] }) if params[:subject_category].present?
+        if params[:subject_category].present?
+          filtered = filtered.where(lecture_offering_details: { subject_category: params[:subject_category] })
+        end
         if params[:target_year].present?
           filtered = filtered.where('JSON_CONTAINS(lecture_offering_details.target_years, ?)', [params[:target_year].to_i].to_json)
         end

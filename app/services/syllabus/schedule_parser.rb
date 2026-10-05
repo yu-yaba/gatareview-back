@@ -18,9 +18,7 @@ module Syllabus
       return Result.new(raw:, kind: 'intensive', slots: []) if INTENSIVE_LABELS.include?(normalized) || term_code == '4'
       return Result.new(raw:, kind: 'other', slots: []) if OTHER_LABELS.include?(normalized) || %w[5 9].include?(term_code)
 
-      if raw.blank?
-        return Result.new(raw:, kind: 'unknown', slots: [], error: '曜日・時限が空で、集中・その他の区分でもありません')
-      end
+      return Result.new(raw:, kind: 'unknown', slots: [], error: '曜日・時限が空で、集中・その他の区分でもありません') if raw.blank?
 
       Result.new(raw:, kind: 'unknown', slots: [], error: "曜日・時限を解析できません: #{raw}")
     end
