@@ -18,7 +18,7 @@
 
 | 変数名 | 必須 | 確認内容 |
 | --- | --- | --- |
-| `JWT_SECRET_KEY` | Recommended | 空でない。未設定時は `RAILS_SECRET_KEY_BASE` を使うが専用キー推奨 |
+| `JWT_SECRET_KEY` | Yes | 32バイト以上のランダムな専用鍵。未設定・空・短い鍵では起動を拒否する。Rails秘密鍵へのフォールバックはしない |
 | `DATABASE_URL` | Optional | 外部 DB を使う場合の接続先。設定時は `JAWSDB_URL` より優先される |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google ログインの token 検証値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |
@@ -72,3 +72,10 @@ heroku run bin/rails db:migrate -a gatareview-back-b726b6ea4bcf
 - `Failed to load review restriction setting`
 
 これらが出ている場合は env / migration 漏れを優先して確認する。
+
+## 2026年10月のセキュリティ更新
+
+- Ruby 3.4.11 / Rails 8.1.4 / Puma 7.2.1を使用する。
+- 既存の十分に強い `JWT_SECRET_KEY` は維持できる。鍵を変更すると既存ユーザーは再ログインが必要になる。
+- `token_version` を含む未適用のmigrationを、フロントの更新前に実行する。
+- API失効に失敗した場合、フロントはログアウトを完了せず再試行を案内する。

@@ -1,11 +1,19 @@
+# frozen_string_literal: true
+
 class JsonWebToken
-  # セキュリティ強化: JWT専用の秘密鍵を使用
-  def self.secret_key
-    ENV['JWT_SECRET_KEY'] ||
-      Rails.application.credentials.jwt_secret_key ||
-      Rails.application.credentials.secret_key_base ||
-      ENV['RAILS_SECRET_KEY_BASE'] ||
-      raise('JWT_SECRET_KEY が設定されていません。JWT専用の秘密鍵を設定してください')
+  ConfigurationError = Class.new(StandardError)
+  MINIMUM_SECRET_BYTES = 32
+
+  def self.secret_key(environment: Rails.env, configured_secret: ENV['JWT_SECRET_KEY'] || Rails.application.credentials.jwt_secret_key)
+    if configured_secret.blank?
+      raise ConfigurationError, 'JWT_SECRET_KEY に32バイト以上のランダムな専用鍵を設定してください' unless %w[development test].include?(environment.to_s)
+
+      return Rails.application.key_generator.generate_key("gatareview-jwt-#{environment}", MINIMUM_SECRET_BYTES).unpack1('H*')
+    end
+
+    raise ConfigurationError, 'JWT_SECRET_KEY は32バイト以上必要です' if configured_secret.bytesize < MINIMUM_SECRET_BYTES
+
+    configured_secret
   end
 
   def self.encode(payload, exp = 30.days.from_now)
@@ -24,9 +32,6 @@ class JsonWebToken
     nil
   rescue JWT::DecodeError => e
     Rails.logger.error "JWT decode error: #{e.message}"
-    nil
-  rescue => e
-    Rails.logger.error "JWT unexpected error: #{e.message}"
     nil
   end
 

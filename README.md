@@ -1,6 +1,6 @@
 # ガタレビュ Backend
 
-新潟大学向け授業レビューサービス「ガタレビュ」の Rails 7 API バックエンドです。  
+新潟大学向け授業レビューサービス「ガタレビュ」の Rails 8 API バックエンドです。
 認証、授業・レビュー・ブックマーク・ありがとう・マイページ API、およびレビュー閲覧制御を担当します。
 
 - Production site: `https://www.gatareview.com`
@@ -38,8 +38,8 @@
 
 | 領域 | 技術 |
 | --- | --- |
-| Language | Ruby 3.2.2 |
-| Framework | Rails 7.0.6 |
+| Language | Ruby 3.4.11 |
+| Framework | Rails 8.1.4 |
 | API | Rails API mode |
 | Database | MySQL |
 | Auth | JWT, Google OAuth |
@@ -60,7 +60,7 @@ spec/factories/           Factory Bot
 
 ## 前提
 
-- Ruby 3.2.2
+- Ruby 3.4.11
 - Bundler
 - MySQL 8 系を推奨
 - 実運用と同じ確認をしたい場合は Docker 実行を推奨
@@ -85,7 +85,8 @@ MYSQL_USER=root
 MYSQL_PASSWORD=your_password
 MYSQL_HOST=127.0.0.1
 
-JWT_SECRET_KEY=your_jwt_secret
+# 開発・テストでは未設定可。本番は専用の32バイト以上の乱数鍵を設定する
+JWT_SECRET_KEY=
 
 # Optional in development / required by feature
 GOOGLE_CLIENT_ID=
@@ -123,8 +124,8 @@ http://localhost:3000
 | `MYSQL_USER` | Yes | 開発 DB ユーザー | Heroku アドオン値 |
 | `MYSQL_PASSWORD` | Yes | 開発 DB パスワード | Heroku アドオン値 |
 | `MYSQL_HOST` | Yes | 開発 DB ホスト | Heroku アドオン値 |
-| `JWT_SECRET_KEY` | Recommended | JWT 署名キー | ランダムな長い文字列 |
-| `RAILS_SECRET_KEY_BASE` | Alternative | `JWT_SECRET_KEY` 未設定時の代替 | Rails secret |
+| `JWT_SECRET_KEY` | Yes in production | JWT専用の署名キー | 32バイト以上の乱数鍵。`ruby -rsecurerandom -e 'puts SecureRandom.hex(32)'` で生成 |
+| `SECRET_KEY_BASE` | Yes in production | Railsの秘密鍵（JWT鍵とは別） | Rails secret |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google トークン検証 | Google Cloud Console の値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | 運用上の Google OAuth 設定保持 | Google Cloud Console の値 |
 | `RECAPTCHA_SECRET_KEY` | Optional in development | レビュー投稿時の reCAPTCHA。production では実質必須 | reCAPTCHA secret |
