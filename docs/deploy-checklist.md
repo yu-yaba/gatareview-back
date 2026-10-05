@@ -23,6 +23,9 @@
 | `GOOGLE_CLIENT_ID` | Feature-based | Google ログインの token 検証値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |
 | `RECAPTCHA_SECRET_KEY` | Feature-based | 本番レビュー投稿で必要 |
+| `RECAPTCHA_ALLOWED_HOSTNAMES` | Yes | `www.gatareview.com,gatareview.com` のような許可ホスト名一覧 |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | Optional | Google認証APIのIP単位上限。既定値 `10` |
+| `API_RATE_LIMIT_PER_FIVE_MINUTES` | Optional | API全体のIP単位上限。既定値 `300` |
 | `FRONTEND_URL` | Recommended | `https://www.gatareview.com` |
 | `ADMIN_EMAILS` | Feature-based | `/admin/review-access` に入るメールアドレス |
 

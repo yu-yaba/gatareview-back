@@ -3,16 +3,16 @@
 source 'https://rubygems.org'
 git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
-ruby '3.2.2'
+ruby '3.2.10'
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem 'rails', '~> 7.0.6'
+gem 'rails', '~> 8.1.3'
 
 # Use mysql as the database for Active Record
 # gem "mysql2", "~> 0.5"
 
 # Use the Puma web server [https://github.com/puma/puma]
-gem 'puma', '~> 5.0'
+gem 'puma', '~> 6.6'
 
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 # gem "jbuilder"
@@ -46,6 +46,9 @@ gem 'bootsnap', require: false
 # Use Rack CORS for handling Cross-Origin Resource Sharing (CORS), making cross-origin AJAX possible
 gem 'rack-cors'
 
+# Throttle abuse-prone public endpoints before they exhaust application threads.
+gem 'rack-attack'
+
 gem 'kaminari'
 
 gem 'pry-rails'
@@ -53,6 +56,9 @@ gem 'pry-rails'
 gem 'mysql2', '~> 0.5.6'
 
 gem 'rspec-rails'
+
+# Keep CI lint behavior stable during the Rails upgrade.
+gem 'rubocop', '1.69.1', require: false
 
 gem 'factory_bot_rails'
 

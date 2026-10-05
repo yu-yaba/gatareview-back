@@ -73,8 +73,9 @@ class Api::V1::AuthController < ApplicationController
     end
   end
 
-  # ログアウト (JWTはstatelessなので、フロントエンド側でトークンを削除)
+  # ログアウト時にtoken_versionを更新し、発行済みJWTをサーバー側でも失効させる
   def logout
+    current_user.increment!(:token_version)
     render json: { message: 'ログアウトしました' }, status: :ok
   end
 
