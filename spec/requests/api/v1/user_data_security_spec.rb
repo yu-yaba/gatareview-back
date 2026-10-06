@@ -10,6 +10,40 @@ RSpec.describe 'User data security', type: :request do
   let(:headers) { { 'Authorization' => "Bearer #{JsonWebToken.encode(user.jwt_payload)}" } }
 
   describe 'authentication across protected endpoints' do
+    it 'does not convert a revoked authenticated review submission into an anonymous review' do
+      issued_headers = headers
+      post '/api/v1/auth/logout', headers: issued_headers
+      expect(response).to have_http_status(:ok)
+
+      expect do
+        post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+          review: { rating: 4, content: 'ローカル回帰テストの本文です。適切な認証情報がない要求では保存されないことを確認します。' }
+        }, headers: issued_headers, as: :json
+      end.not_to change(Review, :count)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.body.include?(user.email)).to be(false)
+    end
+
+    it 'rejects a malformed explicit credential on review creation' do
+      expect do
+        post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+          review: { rating: 4, content: 'ローカル回帰テストの本文です。明示した認証情報が無効な要求では保存されないことを確認します。' }
+        }, headers: { 'Authorization' => 'Bearer invalid-local-test-input' }, as: :json
+      end.not_to change(Review, :count)
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    it 'preserves intended anonymous review creation when no credentials are supplied' do
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+        review: { rating: 4, content: 'ローカル回帰テストの本文です。認証情報を送らない通常の匿名投稿は引き続き受け付けられます。' }
+      }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(Review.last.user_id).to be_nil
+    end
+
     %w[
       /api/v1/auth/me /api/v1/mypage /api/v1/mypage/reviews /api/v1/mypage/bookmarks
       /api/v1/timetable /api/v1/admin/review-access
@@ -60,6 +94,31 @@ RSpec.describe 'User data security', type: :request do
       get '/api/v1/admin/review-access', headers: { 'Authorization' => "Bearer #{JsonWebToken.encode(claims)}" }
 
       expect(response).to have_http_status(:forbidden)
+    end
+  end
+
+  describe 'public response privacy' do
+    before do
+      create(:review, user: user, lecture: lecture)
+      create(:review, user: other_user, lecture: lecture)
+    end
+
+    [
+      ->(lecture_id) { "/api/v1/lectures/#{lecture_id}/reviews" },
+      ->(_lecture_id) { '/api/v1/reviews/latest' },
+      ->(lecture_id) { "/api/v1/lectures/#{lecture_id}" },
+      ->(_lecture_id) { '/api/v1/lectures' },
+      ->(_lecture_id) { '/api/v1/lectures/popular' }
+    ].each do |path|
+      it 'keeps emails and private authentication attributes out of public JSON' do
+        get path.call(lecture.id)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body.include?(user.email)).to be(false)
+        expect(response.body.include?(other_user.email)).to be(false)
+        keys = collect_json_keys(response.parsed_body)
+        expect(keys & %w[email token token_version provider provider_id backendToken secret]).to be_empty
+      end
     end
   end
 
@@ -176,6 +235,17 @@ RSpec.describe 'User data security', type: :request do
         expect(response).to have_http_status(:ok)
         expect(response.parsed_body.dig('pagination', 'per_page')).to eq(50)
       end
+    end
+  end
+
+  def collect_json_keys(value)
+    case value
+    when Hash
+      value.keys + value.values.flat_map { |item| collect_json_keys(item) }
+    when Array
+      value.flat_map { |item| collect_json_keys(item) }
+    else
+      []
     end
   end
 end

@@ -6,9 +6,18 @@ module Api
       include Authenticatable
       skip_before_action :authenticate_request, only: %i[index show popular no_reviews]
       before_action :require_admin_privileges, only: [:create]
+      before_action :validate_search_parameters, only: [:index]
+
+      SEARCH_PARAMETERS = %i[
+        page search faculty sort period_year period_term academic_year review_term_code
+        textbook attendance grading_type content_difficulty content_quality term day
+        period offering_year credits target_year campus language delivery_method subject_category
+      ].freeze
+      MAX_SEARCH_PARAMETER_LENGTH = 255
+      MAX_PAGE = 10_000
 
       def index
-        page = [params[:page]&.to_i || 1, 1].max
+        page = @requested_page
         per_page = 20
 
         # 効率的なクエリ構築
@@ -154,6 +163,23 @@ module Api
       end
 
       private
+
+      def validate_search_parameters
+        invalid = SEARCH_PARAMETERS.any? do |name|
+          value = params[name]
+          !value.nil? && (!value.is_a?(String) || value.length > MAX_SEARCH_PARAMETER_LENGTH)
+        end
+        return render_invalid_search if invalid
+
+        @requested_page = params[:page].blank? ? 1 : [Integer(params[:page], 10), 1].max
+        render_invalid_search if @requested_page > MAX_PAGE
+      rescue ArgumentError, TypeError
+        render_invalid_search
+      end
+
+      def render_invalid_search
+        render json: { error: '検索条件の形式または長さが不正です。' }, status: :bad_request
+      end
 
       def lecture_params
         params.expect(lecture: %i[title lecturer faculty])

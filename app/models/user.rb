@@ -37,17 +37,17 @@ class User < ApplicationRecord
             avatar_url: google_user_info['picture']
           )
         rescue ActiveRecord::RecordNotUnique => e
-          Rails.logger.warn "Duplicate user creation attempt: #{e.message}"
+          Rails.logger.warn "Duplicate user creation attempt: #{e.class}"
           # 競合が発生した場合は再度検索
           where(provider: 'google', provider_id: google_user_info['sub']).first!
         end
       end
     end
   rescue ActiveRecord::RecordInvalid => e
-    Rails.logger.error "User creation/update failed: #{e.message}"
+    Rails.logger.error "User creation/update failed: #{e.class}"
     raise e
   rescue => e
-    Rails.logger.error "Unexpected error in from_google_oauth: #{e.message}"
+    Rails.logger.error "Unexpected error in from_google_oauth: #{e.class}"
     raise e
   end
 

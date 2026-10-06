@@ -28,5 +28,8 @@ module Authenticatable
 
   def authenticate_optional_for_create
     authenticate_optional
+    return unless request.headers['Authorization'].present? && !current_user
+
+    render json: { error: '認証が必要です' }, status: :unauthorized
   end
 end

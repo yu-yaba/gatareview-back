@@ -47,8 +47,7 @@ class Api::V1::AuthController < ApplicationController
         render json: { error: '無効なGoogleトークンです' }, status: :unauthorized
       end
     rescue => e
-      Rails.logger.error "Google OAuth error: #{e.message}"
-      Rails.logger.error "Backtrace: #{e.backtrace.first(5).join('\n')}"
+      Rails.logger.error "Google OAuth error: #{e.class}"
       render json: { error: '認証に失敗しました' }, status: :internal_server_error
     ensure
       Rails.logger.info "==============================="
@@ -82,7 +81,7 @@ class Api::V1::AuthController < ApplicationController
   private
 
   def verify_google_token(token)
-    return nil if token.blank?
+    return nil unless token.is_a?(String) && token.present?
     
     Rails.logger.info "=== Google Token Verification START ==="
     Rails.logger.info "Token received for verification"
@@ -117,17 +116,15 @@ class Api::V1::AuthController < ApplicationController
     else
       Rails.logger.error "❌ Google token verification failed"
       Rails.logger.error "Response code: #{response.code}"
-      Rails.logger.error "Response message: #{response.message}"
       nil
     end
   rescue HTTParty::Error, Net::TimeoutError => e
-    Rails.logger.error "❌ Google token verification network error: #{e.message}"
+    Rails.logger.error "❌ Google token verification network error: #{e.class}"
     Rails.logger.error "Error class: #{e.class}"
     nil
   rescue => e
-    Rails.logger.error "❌ Google token verification unexpected error: #{e.message}"
+    Rails.logger.error "❌ Google token verification unexpected error: #{e.class}"
     Rails.logger.error "Error class: #{e.class}"
-    Rails.logger.error "Backtrace: #{e.backtrace.first(5).join('\n')}"
     nil
   ensure
     Rails.logger.info "=== Google Token Verification END ==="
@@ -211,8 +208,7 @@ class Api::V1::AuthController < ApplicationController
     Rails.logger.info "=== Token Validation SUCCESS ==="
     true
   rescue => e
-    Rails.logger.error "❌ Token validation error: #{e.message}"
-    Rails.logger.error "Backtrace: #{e.backtrace.first(3).join('\n')}"
+    Rails.logger.error "❌ Token validation error: #{e.class}"
     false
   end
 end

@@ -125,4 +125,69 @@ RSpec.describe 'API rate limiting', type: :request do
 
     expect(RateLimitDiscriminator.client_ip(request, heroku: true)).to eq('2001:db8::1')
   end
+
+  it 'throttles a real Google route despite repeated slashes, changing query, form and JSON bodies' do
+    allow(HTTParty).to receive(:get).and_return(double(success?: false, code: 400, message: 'Bad Request'))
+
+    Rack::Attack::AUTH_LIMIT.times do |index|
+      post "//api//v1//auth//google?attempt=#{index}",
+           params: { token: 'fake-token' },
+           headers: { 'REMOTE_ADDR' => '192.0.2.88', 'HTTP_X_FORWARDED_FOR' => "198.51.100.#{index + 1}" },
+           as: index.even? ? :json : nil
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    post '//api//v1//auth//google', params: { token: 'fake-token' }, headers: { 'REMOTE_ADDR' => '192.0.2.88' }
+
+    expect(response).to have_http_status(:too_many_requests)
+    expect(HTTParty).to have_received(:get).exactly(Rack::Attack::AUTH_LIMIT).times
+  end
+
+  it 'keeps anonymous review writes behind the API limit for repeated-slash routes' do
+    ip = '192.0.2.89'
+    lecture = create(:lecture)
+    (Rack::Attack::API_LIMIT - 3).times { rate_limit_client.get('/api/v1/lectures', 'REMOTE_ADDR' => ip) }
+    params = { review: { rating: 4.5, content: '匿名投稿の正常なレビュー本文です。' * 3 } }
+
+    3.times do |index|
+      post "//api//v1//lectures//#{lecture.id}//reviews?attempt=#{index}",
+           params: params,
+           headers: { 'REMOTE_ADDR' => ip }, as: :json
+      expect(response).to have_http_status(:created)
+    end
+
+    post "//api//v1//lectures//#{lecture.id}//reviews", params: params, headers: { 'REMOTE_ADDR' => ip }, as: :json
+
+    expect(response).to have_http_status(:too_many_requests)
+    expect(lecture.reviews.count).to eq(3)
+  end
+
+  it 'does not apply the API limit to a nearby non-API prefix' do
+    (Rack::Attack::API_LIMIT + 1).times do
+      expect(rate_limit_client.get('/apiary', 'REMOTE_ADDR' => '192.0.2.90').status).to eq(200)
+    end
+  end
+
+  it 'does not let a body method-override field bypass POST authentication throttling' do
+    allow(HTTParty).to receive(:get).and_return(double(success?: false, code: 400, message: 'Bad Request'))
+
+    Rack::Attack::AUTH_LIMIT.times do
+      post '/api/v1/auth/google', params: { token: 'fake-token', _method: 'get' }
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    post '/api/v1/auth/google', params: { token: 'fake-token', _method: 'patch' }
+
+    expect(response).to have_http_status(:too_many_requests)
+    expect(HTTParty).to have_received(:get).exactly(Rack::Attack::AUTH_LIMIT).times
+  end
+
+  it 'does not authenticate through GET or HEAD requests to the POST-only route' do
+    expect(HTTParty).not_to receive(:get)
+
+    %i[get head].each do |method|
+      send(method, '/api/v1/auth/google', params: { token: 'fake-token', _method: 'post' })
+      expect(response.status).to be < 500
+    end
+  end
 end

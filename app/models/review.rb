@@ -54,6 +54,11 @@ class Review < ApplicationRecord
                          if: -> { new_record? || will_save_change_to_attribute?(attribute) }
   end
 
+  %i[period_year period_term].each do |attribute|
+    validates attribute, length: { maximum: 255 }, allow_nil: true,
+                         if: -> { new_record? || will_save_change_to_attribute?(attribute) }
+  end
+
   validates :user_id, uniqueness: { scope: :lecture_id, allow_nil: true, message: 'は同じ講義に複数のレビューを投稿できません' }
   validates :academic_year, inclusion: { in: 2000..2100 }, allow_nil: true
   validates :term_code, inclusion: { in: LectureOffering::TERM_EXPANSION.keys }, allow_nil: true

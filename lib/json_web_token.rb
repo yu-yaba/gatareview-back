@@ -3,6 +3,7 @@
 class JsonWebToken
   ConfigurationError = Class.new(StandardError)
   MINIMUM_SECRET_BYTES = 32
+  ISSUED_AT_CLOCK_SKEW_SECONDS = 30
 
   def self.secret_key(environment: Rails.env, configured_secret: ENV['JWT_SECRET_KEY'] || Rails.application.credentials.jwt_secret_key)
     if configured_secret.blank?
@@ -23,19 +24,32 @@ class JsonWebToken
   end
 
   def self.decode(token)
-    return nil if token.blank?
+    return nil unless token.is_a?(String) && token.present?
 
-    decoded = JWT.decode(token, secret_key, true, { algorithm: 'HS256' })[0]
+    decoded = JWT.decode(token, secret_key, true, {
+                           algorithm: 'HS256', required_claims: %w[user_id token_version exp iat]
+                         })[0]
+    return nil unless valid_authentication_claims?(decoded)
+
     HashWithIndifferentAccess.new(decoded)
   rescue JWT::ExpiredSignature => e
-    Rails.logger.warn "JWT expired: #{e.message}"
+    Rails.logger.warn "JWT expired: #{e.class}"
     nil
   rescue JWT::DecodeError => e
-    Rails.logger.error "JWT decode error: #{e.message}"
+    Rails.logger.error "JWT decode rejected: #{e.class}"
     nil
   end
 
   def self.valid_token?(token)
     !decode(token).nil?
   end
+
+  def self.valid_authentication_claims?(claims)
+    return false unless claims.is_a?(Hash)
+    return false unless %w[user_id token_version exp iat].all? { |key| claims[key].is_a?(Integer) }
+
+    claims['user_id'].positive? && claims['token_version'] >= 0 && claims['exp'].positive? &&
+      claims['iat'] >= 0 && claims['iat'] <= Time.current.to_i + ISSUED_AT_CLOCK_SKEW_SECONDS
+  end
+  private_class_method :valid_authentication_claims?
 end

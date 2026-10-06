@@ -38,6 +38,22 @@ RSpec.describe JsonWebToken do
       expect(described_class.decode(described_class.encode(payload))[:user_id]).to eq(123)
     end
 
+    [123, true, ['invalid-input'], { invalid: 'input' }].each do |input|
+      it 'rejects non-string input without raising an exception' do
+        expect(described_class.decode(input)).to be_nil
+      end
+    end
+
+    it 'does not include exception contents in token rejection logs' do
+      marker = SecureRandom.hex(24)
+      messages = []
+      allow(Rails.logger).to receive(:error) { |message| messages << message.to_s }
+      allow(JWT).to receive(:decode).and_raise(JWT::DecodeError.new("Local private value #{marker}"))
+
+      expect(described_class.decode('local-invalid-input')).to be_nil
+      expect(messages.join.include?(marker)).to be(false)
+    end
+
     it 'rejects expired tokens' do
       expect(described_class.decode(described_class.encode(payload, 1.hour.ago))).to be_nil
     end

@@ -60,6 +60,11 @@ RSpec.describe Syllabus::CampusSquareClient do
       'http://127.0.0.1:9999/private',
       'https://syllabus.niigata-u.ac.jp:444/private',
       'https://user:password@syllabus.niigata-u.ac.jp/private',
+      'https://syllabus.niigata-u.ac.jp.outside.example/private',
+      'https://syllabus.niigata-u.ac.jp./private',
+      'https://syllabus.niigata-u.ac.jp%2f%2foutside.example/private',
+      'file:///etc/passwd',
+      'https://outside.example@syllabus.niigata-u.ac.jp/private',
       "\u0000invalid-url"
     ].each do |location|
       it "rejects an untrusted redirect before any request to #{location.inspect}" do
@@ -83,6 +88,32 @@ RSpec.describe Syllabus::CampusSquareClient do
     it 'rejects a non-HTTPS base URL' do
       expect { described_class.new(base_url: 'http://syllabus.niigata-u.ac.jp') }
         .to raise_error(Syllabus::LectureCsvExporter::Error, /HTTPS/)
+    end
+
+    it 'stops when the response has no redirect location' do
+      allow(http).to receive(:request).and_return(Net::HTTPFound.new('1.1', '302', 'Found'))
+
+      expect { client.send(:get_html, '/campus-sy/') }
+        .to raise_error(Syllabus::LectureCsvExporter::Error, /不正なリダイレクト/)
+      expect(Net::HTTP).to have_received(:start).once
+    end
+
+    it 'stops on an empty response body' do
+      response = success_response
+      allow(response).to receive(:body).and_return('')
+      allow(http).to receive(:request).and_return(response)
+
+      expect { client.send(:get_html, '/campus-sy/') }
+        .to raise_error(Syllabus::LectureCsvExporter::Error, /空のレスポンス/)
+    end
+
+    it 'keeps finite timeouts and stops on a network timeout' do
+      allow(Net::HTTP).to receive(:start).and_raise(Net::ReadTimeout)
+
+      expect { client.send(:get_html, '/campus-sy/') }
+        .to raise_error(Syllabus::LectureCsvExporter::Error, /接続に失敗/)
+      expect(Net::HTTP).to have_received(:start)
+        .with('syllabus.niigata-u.ac.jp', 443, use_ssl: true, open_timeout: 10, read_timeout: 30).once
     end
   end
 

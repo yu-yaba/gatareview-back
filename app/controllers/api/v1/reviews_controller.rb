@@ -10,12 +10,12 @@ module Api
       before_action :set_lecture, except: %i[total latest update destroy]
 
       def create
+        review_attributes = review_params
         unless recaptcha_verified?
           render json: { success: false, message: 'reCAPTCHA認証に失敗しました' }, status: :unprocessable_entity
           return
         end
 
-        review_attributes = review_params
         @review = @lecture.reviews.new(review_attributes)
         @review.explicit_offering_reference = review_attributes.key?(:lecture_offering_id)
         @review.suppress_offering_inference = explicitly_clears_offering?(review_attributes)
@@ -156,25 +156,26 @@ module Api
       end
 
       # レビュー閲覧権限をチェック
-      def has_review_access?
-        return true unless review_restriction_enabled?
+      def has_review_access?(restriction_enabled:)
+        return true unless restriction_enabled
         return false unless current_user
 
         current_user.reviews_count >= 1
       end
 
       def review_access_state
+        restriction_enabled = review_restriction_enabled?
         {
-          restriction_enabled: review_restriction_enabled?,
-          access_granted: has_review_access?
+          restriction_enabled: restriction_enabled,
+          access_granted: has_review_access?(restriction_enabled: restriction_enabled)
         }
       end
 
       def review_restriction_enabled?
         SiteSetting.current.lecture_review_restriction_enabled
       rescue ActiveRecord::StatementInvalid => e
-        Rails.logger.error("Failed to load review restriction setting: #{e.class} #{e.message}")
-        false
+        Rails.logger.error("Failed to load review restriction setting: #{e.class}")
+        true
       end
 
       # レビューコンテンツを部分的にマスク
