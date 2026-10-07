@@ -49,14 +49,12 @@ docker-compose run --rm gatareview-back bundle exec rspec
 
 ```bash
 docker-compose run --rm gatareview-back bundle exec rspec spec/models/review_spec.rb
-docker-compose run --rm gatareview-back bundle exec rspec spec/models/lecture_offering_spec.rb
 docker-compose run --rm gatareview-back bundle exec rspec spec/services/syllabus/lecture_csv_importer_spec.rb
 ```
 
 現行の主な spec:
 - `spec/models/review_spec.rb`
 - `spec/models/site_setting_spec.rb`
-- `spec/models/lecture_offering_spec.rb`
 - `spec/services/syllabus/campus_square_client_spec.rb`
 - `spec/services/syllabus/lecture_csv_exporter_spec.rb`
 - `spec/services/syllabus/lecture_csv_importer_spec.rb`
@@ -97,7 +95,7 @@ JWT encode/decode の secret はアプリ設定側に依存する。変更時は
 `User#admin?` は両方を読み、現在ユーザーの email と小文字比較する。
 
 ## 運用時の注意
-- `demo:review_access_seed` は development/test の確認用に使用する。本番では、閲覧制限の変更やデモデータ作成の前に中止する。
+- `demo:review_access_seed` はdevelopment/test専用。本番では閲覧制限の変更やデモデータ作成の前に中止する。
 - Google OAuth の client ID はフロントエンド NextAuth とバックエンド token 検証で同じものを使う。
 - production で `RECAPTCHA_SECRET_KEY` がないとレビュー投稿は失敗する。
 - 管理者 API はメールアドレス環境変数に依存するため、管理者追加・削除は環境変数変更と再起動が必要になる。

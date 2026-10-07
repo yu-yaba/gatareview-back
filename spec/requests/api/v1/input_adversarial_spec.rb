@@ -18,9 +18,8 @@ RSpec.describe 'API adversarial input boundaries', type: :request do
 
   describe 'lecture search' do
     %i[
-      page search faculty sort period_year period_term academic_year review_term_code
-      textbook attendance grading_type content_difficulty content_quality term day
-      period offering_year credits target_year campus language delivery_method subject_category
+      page search faculty sort period_year period_term textbook attendance grading_type
+      content_difficulty content_quality
     ].each do |attribute|
       [['unexpected'], { unexpected: 'value' }].each do |value|
         it "rejects #{attribute} supplied as #{value.class} without a server error" do
@@ -48,7 +47,7 @@ RSpec.describe 'API adversarial input boundaries', type: :request do
     end
 
     it 'rejects a long search before building the database query' do
-      expect(Lecture).not_to receive(:canonical)
+      expect(Lecture).not_to receive(:all)
 
       get '/api/v1/lectures', params: { search: 'x' * 8192 }
 

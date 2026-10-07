@@ -1,10 +1,10 @@
 # バックエンド設計書: アーキテクチャ
 
 ## 目的
-GataReview のバックエンドは、講義、レビュー、ユーザー、ブックマーク、ありがとう、管理設定を扱う Rails 7 API である。フロントエンド Next.js から `/api/v1` 経由で呼び出され、Google OAuth 検証と JWT 認証を提供する。
+GataReview のバックエンドは、講義、レビュー、ユーザー、ブックマーク、ありがとう、管理設定を扱う Rails 8 API である。フロントエンド Next.js から `/api/v1` 経由で呼び出され、Google OAuth 検証と JWT 認証を提供する。
 
 ## 技術スタック
-- Framework: Ruby on Rails 7 API
+- Framework: Ruby on Rails 8 API
 - Database: MySQL 8
 - Test: RSpec
 - Auth: Google OAuth token 検証、バックエンド JWT

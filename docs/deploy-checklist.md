@@ -40,10 +40,14 @@ CAのローテーション通知を受けたら、Aivenが配布する現在・�
 
 ## migration
 
+今回の稼働機能に必要な追加migrationは認証用の `20260716000000_add_token_version_to_users.rb` のみです。未公開のシラバス同期・時間割機能に属する10件は `db/retired_migrations/syllabus/` に退避し、通常のmigration対象から外しています。既に一部が適用された本番DBのテーブル・列・migration履歴は削除しません。余分な列はモデルから参照・公開しないため、現行APIへの復旧にDBの削除やrollbackは不要です。バックアップは本番のDB更新前に保存し、別DBへの復元を確認します。
+
+退避した適用済みmigrationは通常の `db:migrate:status` では `NO FILE` と表示されます。この状態で通常の `db:rollback` を実行しないでください。履歴を含む元の実装は退避先に保存しています。本番の `db:schema:dump` は残存する未使用テーブル・列も出力するため、稼働機能だけを持つ `db/schema.rb` にそのまま上書きしません。
+
 review access 関連では env 追加と別に migration が必要になる。
 
 ```bash
-heroku run bin/rails db:migrate -a gatareview-back-b726b6ea4bcf
+heroku run bin/rails db:migrate -a gatareview-back
 ```
 
 注意:

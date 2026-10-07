@@ -46,7 +46,7 @@ RSpec.describe 'User data security', type: :request do
 
     %w[
       /api/v1/auth/me /api/v1/mypage /api/v1/mypage/reviews /api/v1/mypage/bookmarks
-      /api/v1/timetable /api/v1/admin/review-access
+      /api/v1/admin/review-access
     ].each do |path|
       it "rejects a revoked token at #{path}" do
         issued_headers = headers
@@ -77,7 +77,6 @@ RSpec.describe 'User data security', type: :request do
         %w[delete /api/v1/lectures/1/bookmarks], %w[post /api/v1/reviews/1/thanks],
         %w[get /api/v1/reviews/1/thanks], %w[delete /api/v1/reviews/1/thanks],
         %w[patch /api/v1/reviews/1], %w[delete /api/v1/reviews/1],
-        %w[post /api/v1/timetable/entries], %w[delete /api/v1/timetable/entries/1],
         %w[patch /api/v1/admin/review-access], %w[post /api/v1/lectures]
       ]
 
@@ -196,24 +195,14 @@ RSpec.describe 'User data security', type: :request do
       expect(response).to have_http_status(:forbidden)
       expect(Review.exists?(review.id)).to be(true)
     end
+  end
 
-    it 'cannot delete another users timetable entry even with all_for_lecture' do
-      entry = create(:timetable_entry, user: other_user, lecture: lecture)
+  describe 'published API routes' do
+    it 'does not route the unreleased timetable endpoints' do
+      route_paths = Rails.application.routes.routes.map { |route| route.path.spec.to_s }
 
-      delete "/api/v1/timetable/entries/#{entry.id}", params: { all_for_lecture: true, user_id: other_user.id }, headers: headers
-
-      expect(response).to have_http_status(:not_found)
-      expect(TimetableEntry.exists?(entry.id)).to be(true)
-    end
-
-    it 'keeps another users timetable out of the response' do
-      own_entry = create(:timetable_entry, user: user, lecture: lecture)
-      create(:timetable_entry, user: other_user, lecture: other_lecture)
-
-      get '/api/v1/timetable', params: { year: 2026, term: 1, user_id: other_user.id }, headers: headers
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body.fetch('entries').pluck('id')).to eq([own_entry.id])
+      expect(route_paths).not_to include('/api/v1/timetable(.:format)', '/api/v1/timetable/entries(.:format)',
+                                         '/api/v1/timetable/entries/:id(.:format)')
     end
   end
 
