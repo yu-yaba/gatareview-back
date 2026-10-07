@@ -1,4 +1,6 @@
 class Api::V1::AuthController < ApplicationController
+  MAX_GOOGLE_TOKEN_BYTES = 16 * 1024
+
   include Authenticatable
   skip_before_action :authenticate_request, only: [:google_oauth]
   before_action :authenticate_optional, only: [:me]
@@ -81,7 +83,7 @@ class Api::V1::AuthController < ApplicationController
   private
 
   def verify_google_token(token)
-    return nil unless token.is_a?(String) && token.present?
+    return nil unless token.is_a?(String) && token.present? && token.bytesize <= MAX_GOOGLE_TOKEN_BYTES
     
     Rails.logger.info "=== Google Token Verification START ==="
     Rails.logger.info "Token received for verification"

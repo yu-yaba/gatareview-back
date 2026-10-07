@@ -13,12 +13,13 @@
 - 認証: 不要
 - 目的: Google `id_token` を検証し、バックエンド JWT を発行する。
 - 主な body:
-  - `token`: Google `id_token`
+  - `token`: 空でない文字列の Google `id_token`。最大 16 KiB（16,384 バイト）。
   - `remember`: remember me 指定
 - 主な response:
   - `message`
   - `token`
   - `user`: `id`, `email`, `name`, `avatar_url`, `admin`
+- `token` の型・空白・バイト数が不正な場合、外部照合やユーザー保存を行わず `401` を返す。
 
 ### `GET /auth/me`
 - 認証: 任意。ただし `current_user` がない場合は `401`
@@ -201,3 +202,12 @@
   - `bookmarks`
   - `pagination`
   - `statistics`
+
+## 時間割
+
+### `POST /timetable/entries`
+- 認証: 必須
+- `placements`: 重複を除く前の配列で最大 197 件（4 ターム × 7 曜日 × 7 時限 + 集中講義 1 件）。
+- `conflict_ids`: 置換対象を確認する配列で最大 196 件。`replace` の値に関係なく上限を適用する。
+- 件数超過は配列の変換・重複除去・並べ替えや DB 更新の前に `422` を返す。
+- 上限内の配置不正は `422`、置換確認の不足・不正・状態の変化は従来どおり `409` を返す。

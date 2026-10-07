@@ -201,6 +201,116 @@ RSpec.describe Api::V1::TimetablesController, type: :request do
     expect(user.timetable_entries).to be_empty
   end
 
+  describe 'raw collection limits' do
+    let(:regular_placements) do
+      (1..4).flat_map do |term|
+        (1..7).flat_map do |day|
+          (1..7).map { |period| { term: term, day: day, period: period } }
+        end
+      end
+    end
+
+    it 'accepts all 196 regular cells plus one intensive placement' do
+      post '/api/v1/timetable/entries', params: {
+        lecture_id: lecture.id,
+        year: 2026,
+        placements: regular_placements + [{ term: 0 }]
+      }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(user.timetable_entries.count).to eq(197)
+      expect(response.parsed_body.fetch('entries').length).to eq(197)
+    end
+
+    it 'preserves deduplication for exactly 197 raw placements' do
+      post '/api/v1/timetable/entries', params: {
+        lecture_id: lecture.id,
+        year: 2026,
+        placements: Array.new(197) { { term: 1, day: 1, period: 2 } }
+      }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(user.timetable_entries.count).to eq(1)
+    end
+
+    it 'rejects 198 raw placements before a transaction even if they would deduplicate to one' do
+      existing = create(:timetable_entry, user: user, year: 2026, term: 1, day: 2, period: 2)
+      original_entry = existing.attributes
+      expect(TimetableEntry).not_to receive(:transaction)
+
+      expect do
+        post '/api/v1/timetable/entries', params: {
+          lecture_id: lecture.id,
+          year: 2026,
+          placements: Array.new(198) { { term: 1, day: 1, period: 2 } }
+        }, as: :json
+      end.not_to change(TimetableEntry, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(existing.reload.attributes).to eq(original_entry)
+    end
+
+    it 'accepts confirmation of all 196 existing regular conflicts' do
+      old_lecture = create(:lecture)
+      existing = regular_placements.map do |placement|
+        create(:timetable_entry, user: user, lecture: old_lecture, year: 2026, **placement)
+      end
+
+      post '/api/v1/timetable/entries', params: {
+        lecture_id: lecture.id,
+        year: 2026,
+        placements: regular_placements,
+        replace: true,
+        conflict_ids: existing.map(&:id)
+      }, as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(TimetableEntry.where(id: existing.map(&:id))).to be_empty
+      expect(user.timetable_entries.count).to eq(196)
+      expect(user.timetable_entries.distinct.pluck(:lecture_id)).to eq([lecture.id])
+    end
+
+    [false, true].each do |replace|
+      it "rejects 197 raw conflict IDs before a transaction with replace=#{replace}" do
+        existing = create(:timetable_entry, user: user, year: 2026, term: 1, day: 1, period: 2)
+        original_entry = existing.attributes
+        expect(TimetableEntry).not_to receive(:transaction)
+
+        expect do
+          post '/api/v1/timetable/entries', params: {
+            lecture_id: lecture.id,
+            year: 2026,
+            placements: [{ term: 1, day: 1, period: 2 }],
+            replace: replace,
+            conflict_ids: Array.new(197, existing.id)
+          }, as: :json
+        end.not_to change(TimetableEntry, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(existing.reload.attributes).to eq(original_entry)
+      end
+    end
+
+    it 'keeps the existing 409 response for invalid duplicate confirmation IDs within the limit' do
+      existing = create(:timetable_entry, user: user, year: 2026, term: 1, day: 1, period: 2)
+      original_entry = existing.attributes
+
+      expect do
+        post '/api/v1/timetable/entries', params: {
+          lecture_id: lecture.id,
+          year: 2026,
+          placements: [{ term: 1, day: 1, period: 2 }],
+          replace: true,
+          conflict_ids: Array.new(196, existing.id)
+        }, as: :json
+      end.not_to change(TimetableEntry, :count)
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body).to include('conflict_state_changed' => true)
+      expect(existing.reload.attributes).to eq(original_entry)
+    end
+  end
+
   it 'returns the previous academic year during January through March' do
     travel_to Time.utc(2027, 2, 15, 3, 0, 0) do
       get '/api/v1/timetable'

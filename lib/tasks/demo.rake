@@ -3,6 +3,8 @@
 namespace :demo do
   desc 'review access 確認用のデモデータを投入する'
   task review_access_seed: :environment do
+    abort 'demo:review_access_seed は production では実行できません' if Rails.env.production?
+
     ActiveRecord::Base.transaction do
       setting = SiteSetting.current!
       setting.update!(lecture_review_restriction_enabled: false, last_updated_by: nil)

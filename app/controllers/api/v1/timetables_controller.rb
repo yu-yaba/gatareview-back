@@ -3,7 +3,11 @@
 module Api
   module V1
     class TimetablesController < ApplicationController
+      MAX_CONFLICT_IDS = 4 * 7 * 7
+      MAX_PLACEMENTS = MAX_CONFLICT_IDS + 1
+
       include Authenticatable
+      before_action :validate_collection_sizes, only: :create
 
       def show
         today = current_japan_date
@@ -103,6 +107,18 @@ module Api
       end
 
       private
+
+      def validate_collection_sizes
+        render json: { success: false, errors: ['配置または競合確認の件数が上限を超えています'] }, status: :unprocessable_entity if oversized_collections?
+      end
+
+      def oversized_collections?
+        placements = params[:placements]
+        conflict_ids = params[:conflict_ids]
+
+        (placements.is_a?(Array) && placements.length > MAX_PLACEMENTS) ||
+          (conflict_ids.is_a?(Array) && conflict_ids.length > MAX_CONFLICT_IDS)
+      end
 
       def serialize_entries(entries)
         records = entries.to_a

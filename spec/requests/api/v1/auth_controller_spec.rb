@@ -45,6 +45,47 @@ RSpec.describe 'Api::V1::Auth', type: :request do
     end
 
     {
+      'one byte below the limit' => 'a' * ((16 * 1024) - 1),
+      'exactly the byte limit' => 'a' * (16 * 1024),
+      'multibyte text exactly at the byte limit' => "#{'あ' * 5461}a"
+    }.each do |description, input|
+      it "verifies Google token input with #{description}" do
+        allow(HTTParty).to receive(:get).with(
+          'https://oauth2.googleapis.com/tokeninfo', query: { id_token: input }, timeout: 10
+        ).and_return(instance_double(HTTParty::Response, success?: true, code: 200, parsed_response: google_info))
+
+        expect do
+          post '/api/v1/auth/google', params: { token: input }, as: :json
+        end.to change(User, :count).by(1)
+
+        expect(response).to have_http_status(:ok)
+        expect(HTTParty).to have_received(:get).with(
+          'https://oauth2.googleapis.com/tokeninfo', query: { id_token: input }, timeout: 10
+        ).once
+        expect(JsonWebToken.decode(response.parsed_body.fetch('token'))[:user_id]).to eq(User.last.id)
+      end
+    end
+
+    {
+      'ASCII text one byte over the limit' => 'a' * ((16 * 1024) + 1),
+      'multibyte text one byte over the limit' => "#{'あ' * 5461}ab"
+    }.each do |description, input|
+      it "rejects #{description} without provider work or account changes" do
+        existing_user = create(:user, provider_id: google_info.fetch('sub'))
+        original_account = existing_user.attributes
+        expect(HTTParty).not_to receive(:get)
+
+        expect do
+          post '/api/v1/auth/google', params: { token: input }, as: :json
+        end.not_to change(User, :count)
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.parsed_body).not_to have_key('token')
+        expect(existing_user.reload.attributes).to eq(original_account)
+      end
+    end
+
+    {
       'aud' => 'another-client', 'iss' => 'https://invalid.example',
       'email_verified' => false, 'exp' => '0', 'sub' => ''
     }.each do |field, invalid_value|
