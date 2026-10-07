@@ -5,7 +5,7 @@ default: &default
   username: <%= ENV["MYSQL_USER"] %>
   password: <%= ENV["MYSQL_PASSWORD"] %>
   host: <%= ENV["MYSQL_HOST"] %>
-  port: 3306
+  port: <%= ENV.fetch("MYSQL_PORT", 3306) %>
   timeout: 5000
   reconnect: true
   connect_timeout: 10
@@ -27,3 +27,5 @@ test:
 production:
   <<: *default
   url: <%= ENV['DATABASE_URL'] %>
+  ssl_mode: verify_identity
+  sslca: <%= ENV['MYSQL_SSL_CA'].to_s.empty? ? 'null' : ENV['MYSQL_SSL_CA'].inspect %>

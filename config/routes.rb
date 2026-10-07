@@ -36,6 +36,10 @@ Rails.application.routes.draw do
       get '/mypage', to: 'mypage#show'
       get '/mypage/reviews', to: 'mypage#reviews'
       get '/mypage/bookmarks', to: 'mypage#bookmarks'
+
+      get '/timetable', to: 'timetables#show'
+      post '/timetable/entries', to: 'timetables#create'
+      delete '/timetable/entries/:id', to: 'timetables#destroy'
     end
   end
 

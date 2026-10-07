@@ -8,11 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:8.0.33
+        image: container-registry.oracle.com/mysql/community-server:8.4.12
         ports:
           - "3306:3306"
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_ROOT_HOST: "%"
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot --silent"
           --health-interval=5s
@@ -22,7 +23,7 @@ jobs:
           
     env:
       RAILS_ENV: test
-      JWT_SECRET_KEY: test-jwt-secret-key
+      JWT_SECRET_KEY: ci-only-jwt-secret-with-at-least-32-bytes
 
     steps:
       - name: Checkout code
@@ -31,7 +32,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2.10'
+          ruby-version: '3.4.11'
           bundler-cache: true
 
       - name: Install dependencies
@@ -51,7 +52,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     env:
-      JWT_SECRET_KEY: test-jwt-secret-key
+      JWT_SECRET_KEY: ci-only-jwt-secret-with-at-least-32-bytes
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -59,7 +60,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2.10'
+          ruby-version: '3.4.11'
           bundler-cache: true
 
       - name: Install dependencies

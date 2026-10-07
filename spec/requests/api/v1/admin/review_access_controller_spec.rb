@@ -56,6 +56,30 @@ RSpec.describe Api::V1::Admin::ReviewAccessController, type: :request do
       allow(AuthorizeApiRequest).to receive(:call).and_return({ result: admin_user })
     end
 
+    ['invalid setting shape', [{ lecture_review_restriction_enabled: true }]].each do |invalid_setting|
+      it 'オブジェクト以外の設定入力を400で拒否し設定を変更しないこと' do
+        expect do
+          patch '/api/v1/admin/review-access', params: { review_access: invalid_setting }, as: :json
+        end.not_to change(SiteSetting, :count)
+
+        expect(response).to have_http_status(:bad_request)
+      end
+
+      it '不正な入力でも未認証なら先に401で拒否すること' do
+        allow(AuthorizeApiRequest).to receive(:call).and_return({ result: nil })
+        patch '/api/v1/admin/review-access', params: { review_access: invalid_setting }, as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it '不正な入力でも非管理者なら先に403で拒否すること' do
+        allow(AuthorizeApiRequest).to receive(:call).and_return({ result: general_user })
+        patch '/api/v1/admin/review-access', params: { review_access: invalid_setting }, as: :json
+
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
     it '設定を更新すること' do
       patch '/api/v1/admin/review-access', params: {
         review_access: {

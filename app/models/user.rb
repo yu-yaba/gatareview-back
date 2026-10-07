@@ -2,6 +2,7 @@ class User < ApplicationRecord
   has_many :reviews, dependent: :destroy
   has_many :thanks, dependent: :destroy
   has_many :bookmarks, dependent: :destroy
+  has_many :timetable_entries, dependent: :destroy
   has_many :updated_site_settings, class_name: 'SiteSetting', foreign_key: :last_updated_by_user_id,
                                    dependent: :nullify, inverse_of: :last_updated_by
 
@@ -18,8 +19,9 @@ class User < ApplicationRecord
       user = where(provider: 'google', provider_id: google_user_info['sub']).lock.first
 
       if user
-        # 既存ユーザーの情報更新（名前やアバターが変更されている可能性）
+        # Keep email-based privileges aligned with Google's verified identity.
         user.update!(
+          email: google_user_info['email'],
           name: google_user_info['name'],
           avatar_url: google_user_info['picture']
         )
@@ -35,17 +37,17 @@ class User < ApplicationRecord
             avatar_url: google_user_info['picture']
           )
         rescue ActiveRecord::RecordNotUnique => e
-          Rails.logger.warn "Duplicate user creation attempt: #{e.message}"
+          Rails.logger.warn "Duplicate user creation attempt: #{e.class}"
           # 競合が発生した場合は再度検索
           where(provider: 'google', provider_id: google_user_info['sub']).first!
         end
       end
     end
   rescue ActiveRecord::RecordInvalid => e
-    Rails.logger.error "User creation/update failed: #{e.message}"
+    Rails.logger.error "User creation/update failed: #{e.class}"
     raise e
   rescue => e
-    Rails.logger.error "Unexpected error in from_google_oauth: #{e.message}"
+    Rails.logger.error "Unexpected error in from_google_oauth: #{e.class}"
     raise e
   end
 

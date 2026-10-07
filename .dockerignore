@@ -13,3 +13,13 @@ tmp
 storage
 vendor/bundle
 .bundle
+
+# Credentials and local review artifacts must not enter deployment images.
+config/master.key
+config/credentials/*.key
+*.sql
+*.sql.gz
+output
+.playwright-cli
+playwright-report
+test-results

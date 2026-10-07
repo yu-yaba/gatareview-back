@@ -29,3 +29,10 @@
 /config/master.key
 
 .env
+.env.*
+!.env*.example
+/config/credentials/*.key
+output/
+.playwright-cli/
+*.sql
+*.sql.gz

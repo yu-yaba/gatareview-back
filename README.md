@@ -1,6 +1,6 @@
 # ガタレビュ Backend
 
-新潟大学向け授業レビューサービス「ガタレビュ」の Rails 7 API バックエンドです。  
+新潟大学向け授業レビューサービス「ガタレビュ」の Rails 8 API バックエンドです。
 認証、授業・レビュー・ブックマーク・ありがとう・マイページ API、およびレビュー閲覧制御を担当します。
 
 - Production site: `https://www.gatareview.com`
@@ -38,8 +38,8 @@
 
 | 領域 | 技術 |
 | --- | --- |
-| Language | Ruby 3.2.2 |
-| Framework | Rails 7.0.6 |
+| Language | Ruby 3.4.11 |
+| Framework | Rails 8.1.4 |
 | API | Rails API mode |
 | Database | MySQL |
 | Auth | JWT, Google OAuth |
@@ -60,7 +60,7 @@ spec/factories/           Factory Bot
 
 ## 前提
 
-- Ruby 3.2.2
+- Ruby 3.4.11
 - Bundler
 - MySQL 8 系を推奨
 - 実運用と同じ確認をしたい場合は Docker 実行を推奨
@@ -85,7 +85,8 @@ MYSQL_USER=root
 MYSQL_PASSWORD=your_password
 MYSQL_HOST=127.0.0.1
 
-JWT_SECRET_KEY=your_jwt_secret
+# 開発・テストでは未設定可。本番は専用の32バイト以上の乱数鍵を設定する
+JWT_SECRET_KEY=
 
 # Optional in development / required by feature
 GOOGLE_CLIENT_ID=
@@ -123,8 +124,8 @@ http://localhost:3000
 | `MYSQL_USER` | Yes | 開発 DB ユーザー | Heroku アドオン値 |
 | `MYSQL_PASSWORD` | Yes | 開発 DB パスワード | Heroku アドオン値 |
 | `MYSQL_HOST` | Yes | 開発 DB ホスト | Heroku アドオン値 |
-| `JWT_SECRET_KEY` | Recommended | JWT 署名キー | ランダムな長い文字列 |
-| `RAILS_SECRET_KEY_BASE` | Alternative | `JWT_SECRET_KEY` 未設定時の代替 | Rails secret |
+| `JWT_SECRET_KEY` | Yes in production | JWT専用の署名キー | 32バイト以上の乱数鍵。`ruby -rsecurerandom -e 'puts SecureRandom.hex(32)'` で生成 |
+| `SECRET_KEY_BASE` | Yes in production | Railsの秘密鍵（JWT鍵とは別） | Rails secret |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google トークン検証 | Google Cloud Console の値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | 運用上の Google OAuth 設定保持 | Google Cloud Console の値 |
 | `RECAPTCHA_SECRET_KEY` | Optional in development | レビュー投稿時の reCAPTCHA。production では実質必須 | reCAPTCHA secret |
@@ -138,6 +139,10 @@ http://localhost:3000
 - `RACK_ENV`
 
 production では `DATABASE_URL` を唯一の DB 接続設定として使います。`JAWSDB_URL` や `HEROKU_DB_*` のような旧設定は参照しません。
+
+本番 MySQL 接続は `ssl_mode: verify_identity` を指定し、暗号化と証明書・ホスト名の検証を必須にします。Aiven など独自 CA を使う場合は、提供元の CA 証明書を実行環境に配置し、`MYSQL_SSL_CA` に読み取り可能な絶対パスを指定してください。未設定時はシステムの CA を使います。URL の `ssl_mode` で検証を弱める設定や、存在しない CA パスは起動時に拒否します。`ssl-mode` は mysql2 の設定名として認識されません。
+
+デプロイ前に実行環境の接続で `SHOW SESSION STATUS LIKE 'Ssl_cipher'` が空でないことと、誤った CA またはホスト名では接続が失敗することを確認してください。CA が未配置・未検証のまま本番へ反映すると DB 接続に失敗します。
 
 `site_settings` は環境変数ではなく DB テーブルです。review access を本番で使う場合は env 追加とは別に migration 実行が必要です。
 
@@ -163,7 +168,7 @@ docker compose run --rm gatareview-back bin/verify
 
 ## 授業 CSV 自動生成
 
-DB 登録は行わず、シラバス検索から seed 互換の CSV だけを生成します。
+DB 登録は行わず、シラバス検索から9列のCSVを生成します。科目・教員・学部に加え、年度、開講番号、所属コード、学期、ターム、曜限を含みます。
 
 ```bash
 bin/rails lectures:export_csv YEAR=2026
@@ -203,6 +208,12 @@ bin/rails lectures:count
 
 ```bash
 bin/rails lectures:count FACULTY='E:経済科学部'
+```
+
+年度ごとの開講・曜限件数（曜限なしの集中講義等も確認できます）:
+
+```bash
+bin/rails lectures:offerings_count
 ```
 
 ## Heroku での本番投入手順

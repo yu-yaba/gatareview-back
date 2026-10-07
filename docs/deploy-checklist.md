@@ -18,8 +18,9 @@
 
 | 変数名 | 必須 | 確認内容 |
 | --- | --- | --- |
-| `JWT_SECRET_KEY` | Recommended | 空でない。未設定時は `RAILS_SECRET_KEY_BASE` を使うが専用キー推奨 |
-| `DATABASE_URL` | Optional | 外部 DB を使う場合の接続先。設定時は `JAWSDB_URL` より優先される |
+| `JWT_SECRET_KEY` | Yes | 32バイト以上のランダムな専用鍵。未設定・空・短い鍵では起動を拒否する。Rails秘密鍵へのフォールバックはしない |
+| `DATABASE_URL` | Yes | 本番DBの唯一の接続先。旧 `JAWSDB_URL` への自動フォールバックはない |
+| `MYSQL_SSL_CA` | Provider-dependent | 独自CAを使う提供元では、配置したCA証明書の読み取り可能なパス。未指定時はシステムのCAを使う |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google ログインの token 検証値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |
 | `RECAPTCHA_SECRET_KEY` | Feature-based | 本番レビュー投稿で必要 |
@@ -72,3 +73,24 @@ heroku run bin/rails db:migrate -a gatareview-back-b726b6ea4bcf
 - `Failed to load review restriction setting`
 
 これらが出ている場合は env / migration 漏れを優先して確認する。
+
+## 2026年10月のセキュリティ更新
+
+- Ruby 3.4.11 / Rails 8.1.4 / Puma 7.2.1を使用する。
+- 既存の十分に強い `JWT_SECRET_KEY` は維持できる。鍵を変更すると既存ユーザーは再ログインが必要になる。
+- `token_version` を含む未適用のmigrationを、フロントの更新前に実行する。
+- API失効に失敗した場合、フロントはログアウトを完了せず再試行を案内する。
+- 本番MySQLは暗号化と証明書・ホスト名の検証を必須にする。DB提供元のCAを配置し、`Ssl_cipher` が空でないことと、誤ったCA・ホスト名の接続が拒否されることを反映前に確認する。
+
+## 転送ヘッダーとリクエスト制限
+
+- Herokuでは `DYNO` がある場合だけ、ルーターが `X-Forwarded-For` の右端に追加したIPを制限のキーに使う。利用者が送れる `Forwarded` や `Client-IP` はキーに使わない。
+- Heroku以外では接続元の `REMOTE_ADDR` を使う。別のプロキシへ移す際は、そのプロキシが保証するヘッダーと信頼境界を確認してから変更する。
+- 現在の本番設定はファイルのキャッシュを使い、同一dyno内のPumaワーカー間でカウンターを共有する。dynoを複数に増やす前に、専用のRedis等へ変更して全dynoで上限を共有する必要がある。再起動時には現在のカウンターが消える。
+- Google認証の制限には `.json` と末尾 `/` の形式も含む。上限値は従来通り、Google認証がIPごとに毎分10件、API全体が5分300件。
+
+## シラバス取得とイメージへの同梱
+
+- シラバスの取得は管理用のコマンドに限定している。HTTPSの設定済み配信元と同じホスト・ポートへのリダイレクトだけを許可し、別ホスト、HTTP、認証情報を含むURLは接続前に拒否する。
+- Dockerイメージには環境変数ファイル、Railsの復号鍵、DBダンプ、ブラウザ操作の記録や確認画像を含めない。環境変数と鍵は実行環境で管理する。
+- CIはMySQL 8.4.12を使う。ローカルの旧DBは別ボリュームへ移す [移行手順](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/mysql84-local-migration.md) に従い、本番DBも提供元のバージョンとサポート期限を確認する。

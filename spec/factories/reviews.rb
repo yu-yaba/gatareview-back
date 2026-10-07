@@ -6,11 +6,11 @@ FactoryBot.define do
     content { 'この授業は内容が分かりやすく、課題も適度で学びが多かったです。おすすめです。' }
     period_year { 2023 }
     period_term { '春' }
-    textbook { '良い教科書' }
-    attendance { '必須' }
-    grading_type { 'テスト中心' }
-    content_difficulty { '適度' }
-    content_quality { '高い' }
+    textbook { '必要' }
+    attendance { '毎回確認' }
+    grading_type { 'テストのみ' }
+    content_difficulty { '普通' }
+    content_quality { '良い' }
     association :lecture
   end
 end

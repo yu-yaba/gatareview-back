@@ -6,16 +6,24 @@ module Api
       include Authenticatable
       skip_before_action :authenticate_request, only: %i[index show popular no_reviews]
       before_action :require_admin_privileges, only: [:create]
+      before_action :validate_search_parameters, only: [:index]
+
+      SEARCH_PARAMETERS = %i[
+        page search faculty sort period_year period_term academic_year review_term_code
+        textbook attendance grading_type content_difficulty content_quality term day
+        period offering_year credits target_year campus language delivery_method subject_category
+      ].freeze
+      MAX_SEARCH_PARAMETER_LENGTH = 255
+      MAX_PAGE = 10_000
 
       def index
-        page = [params[:page]&.to_i || 1, 1].max
+        page = @requested_page
         per_page = 20
 
         # 効率的なクエリ構築
-        @lectures = Lecture.all
+        @lectures = Lecture.canonical
 
         # 検索条件とソート処理
-        has_search_params = params[:search].present? || params[:faculty].present? || review_search_params_present?
         sort_param = params[:sort] || 'newest'
         
         # ソート処理
@@ -44,6 +52,8 @@ module Api
 
         # レビュー詳細項目による検索（JOINを使って効率化）
         @lectures = filter_lectures_by_review_details(@lectures) if review_search_params_present?
+        serialize_matching_offerings = offering_search_params_present?
+        @lectures = filter_lectures_by_offering_details(@lectures) if serialize_matching_offerings
 
         # GROUP BYがない場合のみ決定的なソート（IDでソート）を追加
         unless ['highestRating', 'mostReviewed', 'newest'].include?(sort_param)
@@ -51,21 +61,12 @@ module Api
         end
 
         # 総件数を効率的に取得（詳細検索やGROUP BYの場合を適切に処理）
-        if review_search_params_present?
-          # 詳細検索の場合は専用のカウント処理
-          total_count = count_filtered_lectures_by_review_details
-        elsif ['highestRating', 'mostReviewed', 'newest'].include?(sort_param)
-          # GROUP BYを使用している場合、countの結果は異なる
-          count_result = @lectures.except(:order, :limit, :offset).count
-          total_count = count_result.is_a?(Hash) ? count_result.size : count_result
-        else
-          # 通常のcount（GROUP BYなし）
-          total_count = @lectures.except(:order, :limit, :offset, :group).count
-        end
+        count_result = @lectures.except(:order, :limit, :offset).count
+        total_count = count_result.is_a?(Hash) ? count_result.size : count_result
 
         # ページネーション（limit/offsetを使用）
         offset = (page - 1) * per_page
-        @lectures = @lectures.limit(per_page).offset(offset)
+        @lectures = @lectures.includes(lecture_offerings: %i[offering_slots lecture_offering_detail]).limit(per_page).offset(offset)
 
         # 結果が空の場合
         if @lectures.empty?
@@ -82,7 +83,8 @@ module Api
         end
 
         # JSON化（N+1問題を回避）
-        @lectures_json = Lecture.as_json_reviews(@lectures)
+        offerings_by_lecture_id = matching_offerings_by_lecture_id(@lectures) if serialize_matching_offerings
+        @lectures_json = Lecture.as_json_reviews(@lectures, offerings_by_lecture_id: offerings_by_lecture_id)
 
         total_pages = (total_count.to_f / per_page).ceil
 
@@ -98,13 +100,18 @@ module Api
       end
 
       def show
-        @lecture = Lecture.find_by(id: params[:id])
+        @lecture = Lecture.includes(lecture_offerings: %i[offering_slots lecture_offering_detail]).find_by(id: params[:id])
+        @lecture = @lecture.merged_into_lecture if @lecture&.merged_into_lecture
 
-        if @lecture
-          render json: @lecture.as_json_with_reviews
-        else
+        unless @lecture
           render json: { error: '指定された講義は存在しません。' }, status: :not_found
+          return
         end
+
+        offering = requested_offering(@lecture)
+        return if performed?
+
+        render json: @lecture.as_json_with_reviews(offering: offering)
       end
 
       def create
@@ -122,6 +129,7 @@ module Api
         @lectures = Lecture.joins(:reviews)
                           .group('lectures.id')
                           .order('COUNT(reviews.id) DESC')
+                          .includes(lecture_offerings: %i[offering_slots lecture_offering_detail])
                           .limit(4)
 
         if @lectures.any?
@@ -142,6 +150,7 @@ module Api
         offset = max_offset.positive? ? SecureRandom.random_number(max_offset + 1) : 0
 
         @lectures = lectures_without_reviews.order(:id)
+                                            .includes(lecture_offerings: %i[offering_slots lecture_offering_detail])
                                             .offset(offset)
                                             .limit(limit)
 
@@ -155,8 +164,25 @@ module Api
 
       private
 
+      def validate_search_parameters
+        invalid = SEARCH_PARAMETERS.any? do |name|
+          value = params[name]
+          !value.nil? && (!value.is_a?(String) || value.length > MAX_SEARCH_PARAMETER_LENGTH)
+        end
+        return render_invalid_search if invalid
+
+        @requested_page = params[:page].blank? ? 1 : [Integer(params[:page], 10), 1].max
+        render_invalid_search if @requested_page > MAX_PAGE
+      rescue ArgumentError, TypeError
+        render_invalid_search
+      end
+
+      def render_invalid_search
+        render json: { error: '検索条件の形式または長さが不正です。' }, status: :bad_request
+      end
+
       def lecture_params
-        params.require(:lecture).permit(:title, :lecturer, :faculty)
+        params.expect(lecture: %i[title lecturer faculty])
       end
 
       def require_admin_privileges
@@ -168,19 +194,151 @@ module Api
 
       def review_search_params_present?
         params[:period_year].present? || params[:period_term].present? ||
+          params[:academic_year].present? || params[:review_term_code].present? ||
           params[:textbook].present? || params[:attendance].present? ||
           params[:grading_type].present? || params[:content_difficulty].present? ||
           params[:content_quality].present?
+      end
+
+      def offering_search_params_present?
+        params[:term].present? || params[:day].present? || params[:period].present? || params[:offering_year].present? ||
+          offering_detail_params_present?
+      end
+
+      def filter_lectures_by_offering_details(lectures)
+        lectures.where(id: matching_offerings.select(:lecture_id))
+      end
+
+      def matching_offerings
+        return @matching_offerings if defined?(@matching_offerings)
+
+        year = offering_year
+        return @matching_offerings = LectureOffering.none unless year
+
+        filtered = LectureOffering.active.where(year: year)
+
+        if params[:term].present?
+          if params[:term].to_s == 'intensive'
+            filtered = filtered.where(
+              'lecture_offerings.schedule_kind = :kind OR lecture_offerings.term_code = :term_code',
+              kind: 'intensive', term_code: '4'
+            )
+          elsif params[:term].to_s == 'other'
+            filtered = filtered.where(
+              'lecture_offerings.schedule_kind = :kind OR lecture_offerings.term_code IN (:term_codes)',
+              kind: 'other', term_codes: %w[5 9]
+            )
+          else
+            term_codes = term_codes_for(params[:term])
+            return @matching_offerings = LectureOffering.none if term_codes.empty?
+
+            filtered = filtered.where(term_code: term_codes)
+          end
+        end
+
+        if params[:day].present? || params[:period].present?
+          return @matching_offerings = LectureOffering.none if params[:day].present? && !valid_slot_param?(:day)
+          return @matching_offerings = LectureOffering.none if params[:period].present? && !valid_slot_param?(:period)
+
+          filtered = filtered.joins(:offering_slots)
+          filtered = filtered.where(offering_slots: { day: params[:day].to_i }) if valid_slot_param?(:day)
+          filtered = filtered.where(offering_slots: { period: params[:period].to_i }) if valid_slot_param?(:period)
+        end
+
+        filtered = filter_offerings_by_details(filtered) if offering_detail_params_present?
+
+        @matching_offerings = filtered.distinct
+      end
+
+      def matching_offerings_by_lecture_id(lectures)
+        lecture_ids = lectures.map(&:id)
+
+        matching_offerings.where(lecture_id: lecture_ids)
+                          .includes(:offering_slots, :lecture_offering_detail)
+                          .order(:lecture_id, :id)
+                          .each_with_object({}) do |offering, result|
+          result[offering.lecture_id] ||= offering
+        end
+      end
+
+      def offering_year
+        return LectureOffering.active.maximum(:year) if params[:offering_year].blank?
+
+        year = Integer(params[:offering_year], 10)
+        year.between?(1000, 9999) ? year : nil
+      rescue ArgumentError
+        nil
+      end
+
+      def term_codes_for(term)
+        number = Integer(term, 10)
+        return [] unless number.between?(1, 4)
+
+        LectureOffering::TERM_EXPANSION.select { |_code, terms| terms.include?(number) }.keys
+      rescue ArgumentError
+        []
+      end
+
+      def offering_detail_params_present?
+        %i[credits target_year campus language delivery_method subject_category].any? { |key| params[key].present? }
+      end
+
+      def filter_offerings_by_details(offerings)
+        filtered = offerings.joins(:lecture_offering_detail)
+        filtered = filtered.where(lecture_offering_details: { credits: params[:credits] }) if params[:credits].present?
+        filtered = filtered.where(lecture_offering_details: { campus: params[:campus] }) if params[:campus].present?
+        filtered = filtered.where(lecture_offering_details: { language: params[:language] }) if params[:language].present?
+        filtered = filtered.where(lecture_offering_details: { delivery_method: params[:delivery_method] }) if params[:delivery_method].present?
+        if params[:subject_category].present?
+          filtered = filtered.where(lecture_offering_details: { subject_category: params[:subject_category] })
+        end
+        if params[:target_year].present?
+          filtered = filtered.where('JSON_CONTAINS(lecture_offering_details.target_years, ?)', [params[:target_year].to_i].to_json)
+        end
+        filtered
+      end
+
+      def requested_offering(lecture)
+        return lecture.latest_offering unless params.key?(:offering_id)
+
+        offering_id = positive_offering_id(params[:offering_id])
+        return render_invalid_offering unless offering_id
+
+        offering = lecture.lecture_offerings.active.find_by(id: offering_id)
+        return offering if offering
+
+        render_invalid_offering
+      end
+
+      def positive_offering_id(value)
+        return unless value.is_a?(String) || value.is_a?(Integer)
+        return unless value.to_s.match?(/\A[1-9]\d*\z/)
+
+        id = value.is_a?(Integer) ? value : Integer(value, 10)
+        id if id <= 9_223_372_036_854_775_807
+      rescue ArgumentError, TypeError
+        nil
+      end
+
+      def render_invalid_offering
+        render json: { error: '指定された開講情報はこの講義に存在しません。' }, status: :not_found
+        nil
+      end
+
+      def valid_slot_param?(name)
+        value = Integer(params[name], 10)
+        value.between?(1, 7)
+      rescue ArgumentError
+        false
       end
 
       def filter_lectures_by_review_details(lectures)
         conditions, params_values = build_review_search_conditions
         return lectures if conditions.empty?
 
-        # JOINクエリで効率的に検索（DISTINCTを使う場合はSELECTに必要なカラムを明示）
+        # JOINクエリで効率的に検索し、複数ReviewによるLectureの重複を除く
         lectures.joins(:reviews)
                 .where(conditions.join(' AND '), *params_values)
-                .select('lectures.*')
                 .distinct
       end
 
@@ -189,7 +347,7 @@ module Api
         return 0 if conditions.empty?
 
         # 基本クエリを構築
-        base_query = Lecture.all
+        base_query = Lecture.canonical
 
         # 基本検索（キーワード、学部）の条件を追加
         base_query = base_query.search_by_title_and_lecturer(params[:search]) if params[:search].present?
@@ -206,14 +364,30 @@ module Api
         conditions = []
         params_values = []
 
-        if params[:period_year].present?
-          conditions << 'reviews.period_year = ?'
-          params_values << params[:period_year]
+        review_year = params[:academic_year].presence || params[:period_year].presence
+        if review_year
+          conditions << '(reviews.academic_year = ? OR (reviews.academic_year IS NULL AND reviews.period_year = ?))'
+          params_values << review_year.to_i
+          params_values << review_year.to_s
         end
 
-        if params[:period_term].present?
-          conditions << 'reviews.period_term = ?'
-          params_values << params[:period_term]
+        if params[:review_term_code].present?
+          review_term = params[:review_term_code]
+          legacy_terms = Review::PERIOD_TERM_TO_CODE.select { |_label, code| code == review_term }.keys
+          conditions << '(reviews.term_code = ? OR (reviews.term_code IS NULL AND reviews.period_term IN (?)))'
+          params_values << review_term
+          params_values << legacy_terms
+        elsif params[:period_term].present?
+          review_term = Review::PERIOD_TERM_TO_CODE[params[:period_term]]
+          if review_term
+            legacy_terms = Review::PERIOD_TERM_TO_CODE.select { |_label, code| code == review_term }.keys
+            conditions << '(reviews.term_code = ? OR (reviews.term_code IS NULL AND reviews.period_term IN (?)))'
+            params_values << review_term
+            params_values << legacy_terms
+          else
+            conditions << 'reviews.period_term = ?'
+            params_values << params[:period_term]
+          end
         end
 
         if params[:textbook].present?

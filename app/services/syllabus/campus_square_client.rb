@@ -13,7 +13,13 @@ module Syllabus
 
     def initialize(base_url: BASE_URL)
       @base_uri = URI(base_url)
+      unless @base_uri.scheme == 'https' && @base_uri.host.present? && @base_uri.userinfo.nil?
+        raise LectureCsvExporter::Error, 'シラバス接続先には認証情報を含まないHTTPS URLが必要です。'
+      end
+
       @cookies = {}
+    rescue URI::InvalidURIError
+      raise LectureCsvExporter::Error, 'シラバス接続先URLが不正です。'
     end
 
     def search_results(year:, faculty_code:, term_code: nil, display_count: LectureCsvExporter::DISPLAY_COUNT)
@@ -73,7 +79,8 @@ module Syllabus
         location = response['location']
         raise LectureCsvExporter::Error, 'シラバス検索から不正なリダイレクトが返されました。' if location.blank?
 
-        get_html(location, redirects_left: redirects_left - 1)
+        next_uri = resolve_uri(location, relative_to: uri)
+        get_html(next_uri.to_s, redirects_left: redirects_left - 1)
       else
         body = normalize_body(response)
         raise LectureCsvExporter::Error, 'シラバス検索から空のレスポンスが返されました。' if body.blank?
@@ -114,9 +121,15 @@ module Syllabus
       cookies.map { |name, value| "#{name}=#{value}" }.join('; ')
     end
 
-    def resolve_uri(path_or_url)
-      uri = URI.parse(path_or_url)
-      uri.host.present? ? uri : URI.join(base_uri.to_s, path_or_url)
+    def resolve_uri(path_or_url, relative_to: base_uri)
+      uri = URI.join(relative_to.to_s, path_or_url.to_s)
+      unless uri.scheme == 'https' && uri.host == base_uri.host && uri.port == base_uri.port && uri.userinfo.nil?
+        raise LectureCsvExporter::Error, 'シラバス検索の接続先が許可されたHTTPS配信元と一致しません。'
+      end
+
+      uri
+    rescue URI::InvalidURIError
+      raise LectureCsvExporter::Error, 'シラバス検索の接続先URLが不正です。'
     end
 
     def normalize_body(response)

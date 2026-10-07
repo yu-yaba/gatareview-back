@@ -5,7 +5,7 @@
 - backend は Heroku 上で動かし続ける
 - production DB を JawsDB から Aiven for MySQL Free に移す
 - frontend は現在の backend URL を使い続ける
-- Heroku の環境変数切替だけでロールバックできる状態にする
+- 旧DBの接続先とCA証明書を保管し、両方を戻せる状態にする
 
 ## 現在構成と移行後構成
 
@@ -15,19 +15,21 @@
 
 ## 必要なコード状態
 
-- production の DB 設定は `DATABASE_URL` を優先し、未設定時は `JAWSDB_URL` にフォールバックする
-- このリポジトリでは、その挙動を [config/database.yml](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/config/database.yml) に実装済み
+- production の DB 設定は `DATABASE_URL` を使う。`JAWSDB_URL` への自動フォールバックはない
+- [config/database.yml](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/config/database.yml) で本番の証明書・ホスト名検証を指定する。Aiven独自のCAを使う場合は、`MYSQL_SSL_CA` に読み取り可能なCA証明書のパスを設定する。未設定時はシステムのCAを使う
+- AivenのURIに含まれる `ssl-mode=REQUIRED` はmysql2の `ssl_mode` とは別のキーなので、URIを貼るだけでTLSが有効になるとは判断しない。本番設定で検証を明示し、接続後に暗号化を確かめる
 
 ## 前提条件
 
 - Aiven の MySQL サービスが作成済みである
 - Aiven コンソールから接続情報を取得できる
 - `DATABASE_URL` 対応コードを Heroku に先に deploy してある
+- Aiven独自のCAを使う場合は、証明書が実行環境から読み取れる場所にあり、`MYSQL_SSL_CA` がそのパスを指している。システムのCAで検証できるサービスの場合も、後述の接続検証を行う
 - Aiven 切替後もしばらくは JawsDB を残しておく
 
 ## 環境変数
 
-- `JAWSDB_URL` はロールバック用にそのまま残す
+- 旧DBの `DATABASE_URL` とCA証明書のパスを安全な場所に保管する。値をログやドキュメントに転記しない
 - `DATABASE_URL` は切替時にだけ Heroku へ追加する
 - `FRONTEND_URL`、`JWT_SECRET_KEY`、`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`RECAPTCHA_SECRET_KEY` は変更しない
 
@@ -41,16 +43,17 @@ Aiven コンソールから以下を控える。
 - `AIVEN_DB_USER`
 - `AIVEN_DB_PASSWORD`
 - `AIVEN_DATABASE_URL`
+- AivenコンソールからダウンロードしたCA証明書
 
-Heroku の `DATABASE_URL` には、Aiven コンソールが出す URI をそのまま使う。
+Herokuの `DATABASE_URL` にはAivenの接続先を設定し、`MYSQL_SSL_CA` にはコンテナ内のCA証明書のパスを設定する。手元のファイルパスを設定するだけでは、Herokuのコンテナからは読み取れない。CA証明書をイメージに同梱する場合、公開用のCA証明書だけを扱い、Railsの復号鍵や秘密鍵を同梱しない。
+
+本番の接続先・CA証明書は今回のローカル検証では確認していない。以下の実接続確認は本番反映前に運用者が行う。CAの更新時にも、証明書と接続の検証を繰り返す。
 
 ## リハーサル
 
-### 1. 現在の Heroku DB URL を確認する
+### 1. 現在の接続先とCA証明書を保管する
 
-```bash
-heroku config:get JAWSDB_URL -a gatareview-back
-```
+Herokuの設定から現在のDB接続先を確認し、URLと対応するCA証明書を安全に保管する。シェルの履歴、共有ログ、監査レポートには秘密値を出力しない。
 
 ### 2. JawsDB の dump をローカルに取得する
 
@@ -62,6 +65,8 @@ mysqldump \
   --set-gtid-purged=OFF \
   --column-statistics=0 \
   --default-character-set=utf8mb4 \
+  --ssl-mode=VERIFY_IDENTITY \
+  --ssl-ca=<JAWSDB_CA_CERTIFICATE> \
   -h <JAWSDB_HOST> \
   -P <JAWSDB_PORT> \
   -u <JAWSDB_USER> \
@@ -74,6 +79,8 @@ mysqldump \
 ```bash
 mysql \
   --default-character-set=utf8mb4 \
+  --ssl-mode=VERIFY_IDENTITY \
+  --ssl-ca=<AIVEN_CA_CERTIFICATE> \
   -h <AIVEN_DB_HOST> \
   -P <AIVEN_DB_PORT> \
   -u <AIVEN_DB_USER> \
@@ -96,10 +103,22 @@ mysql \
 一時的に `DATABASE_URL` を差し込んで、backend コードから読み取り確認を行う。
 
 ```bash
-DATABASE_URL='<AIVEN_DATABASE_URL>' bin/rails runner 'puts ActiveRecord::Base.connection.select_value("SELECT 1")'
-DATABASE_URL='<AIVEN_DATABASE_URL>' bin/rails runner 'puts Lecture.count'
-DATABASE_URL='<AIVEN_DATABASE_URL>' bin/rails runner 'puts Review.count'
+RAILS_ENV=production DATABASE_URL='<AIVEN_DATABASE_URL>' MYSQL_SSL_CA='<AIVEN_CA_CERTIFICATE>' bin/rails runner 'puts ActiveRecord::Base.connection.select_value("SELECT 1")'
+RAILS_ENV=production DATABASE_URL='<AIVEN_DATABASE_URL>' MYSQL_SSL_CA='<AIVEN_CA_CERTIFICATE>' bin/rails runner 'puts Lecture.count'
+RAILS_ENV=production DATABASE_URL='<AIVEN_DATABASE_URL>' MYSQL_SSL_CA='<AIVEN_CA_CERTIFICATE>' bin/rails runner 'puts Review.count'
 ```
+
+本番と同じ設定で接続し、暗号化が有効か確認する。
+
+```bash
+RAILS_ENV=production DATABASE_URL='<AIVEN_DATABASE_URL>' MYSQL_SSL_CA='<AIVEN_CA_CERTIFICATE>' bin/rails runner - <<'RUBY'
+cipher = ActiveRecord::Base.connection.select_rows("SHOW SESSION STATUS LIKE 'Ssl_cipher'").first&.last
+abort 'MySQL TLS is not active' if cipher.blank?
+puts 'MySQL TLS is active'
+RUBY
+```
+
+`Ssl_cipher` が空なら反映を止める。CAが誤っている場合やホスト名が一致しない場合に接続が拒否されることも、テスト環境で確認する。`SELECT 1` の成功だけでは暗号化や証明書検証の証拠にならない。
 
 ## 本番切替
 
@@ -121,6 +140,7 @@ heroku maintenance:on -a gatareview-back
 
 ```bash
 heroku config:set DATABASE_URL='<AIVEN_DATABASE_URL>' -a gatareview-back
+heroku config:set MYSQL_SSL_CA='<CA_PATH_IN_CONTAINER>' -a gatareview-back
 ```
 
 ### 5. dyno を再起動する
@@ -130,6 +150,8 @@ heroku restart -a gatareview-back
 ```
 
 ### 6. 読み取り系のスモークチェックを行う
+
+リハーサルと同じ `Ssl_cipher` の確認をHerokuの実行環境でも行い、TLSが有効であることを確認する。
 
 以下を確認する。
 
@@ -171,12 +193,15 @@ heroku maintenance:off -a gatareview-back
 
 ```bash
 heroku maintenance:on -a gatareview-back
-heroku config:unset DATABASE_URL -a gatareview-back
+heroku config:set DATABASE_URL='<PREVIOUS_DATABASE_URL>' MYSQL_SSL_CA='<PREVIOUS_CA_PATH_IN_CONTAINER>' -a gatareview-back
 heroku restart -a gatareview-back
-heroku maintenance:off -a gatareview-back
 ```
 
-`JAWSDB_URL` は残してあるので、再起動後は自動で元の DB に戻る。
+`DATABASE_URL` を削除しても `JAWSDB_URL` には戻らない。旧DBの接続先とCA設定を明示的に戻し、接続、`Ssl_cipher`、APIの応答を確認してからmaintenance modeを解除する。切替後にAivenへ書き込んだデータは旧DBへ自動反映されないため、ロールバック前に差分を確認する。
+
+```bash
+heroku maintenance:off -a gatareview-back
+```
 
 ## 切替後
 

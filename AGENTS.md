@@ -2,7 +2,7 @@
 
 ## 概要
 
-このリポジトリはガタレビュの Rails 7 API バックエンドです。  
+このリポジトリはガタレビュの Rails 8 API バックエンドです。
 主に認証、レビュー・授業・ブックマーク・ありがとう API、レビュー閲覧制御、MySQL データモデルを担当します。
 
 ## 主要ディレクトリ
@@ -43,8 +43,8 @@ docker-compose exec gatareview-back bin/rails console
 
 前提バージョン:
 
-- Ruby `3.2.2`
-- Rails `7.0.6`
+- Ruby `3.4.11`
+- Rails `8.1.4`
 
 ## 実装上の重要ポイント
 

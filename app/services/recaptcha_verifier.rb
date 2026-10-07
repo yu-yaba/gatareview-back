@@ -4,6 +4,7 @@ require 'httparty'
 
 class RecaptchaVerifier
   DEFAULT_ALLOWED_HOSTNAMES = %w[gatareview.com www.gatareview.com].freeze
+  MAX_TOKEN_BYTES = 16 * 1024
 
   attr_reader :score, :action, :hostname
 
@@ -24,6 +25,8 @@ class RecaptchaVerifier
   end
 
   def verify
+    return false unless @token.is_a?(String) && @token.present? && @token.bytesize <= MAX_TOKEN_BYTES
+
     secret_key = ENV['RECAPTCHA_SECRET_KEY']
     return false if secret_key.blank?
 
@@ -35,7 +38,8 @@ class RecaptchaVerifier
 
     response = HTTParty.post(
       'https://www.google.com/recaptcha/api/siteverify',
-      body: body
+      body: body,
+      timeout: 10
     )
 
     result = JSON.parse(response.body)
@@ -49,16 +53,19 @@ class RecaptchaVerifier
       false
     end
   rescue StandardError => e
-    Rails.logger.error "reCAPTCHA verification failed: #{e.message}"
+    Rails.logger.error "reCAPTCHA verification failed: #{e.class}"
     false
   end
 
   private
 
   def valid_result?(result)
-    result['success'] &&
+    return false unless result.is_a?(Hash)
+
+    score = result['score']
+    result['success'] == true &&
       result['action'] == @expected_action &&
-      result['score'].to_f >= @minimum_score &&
+      score.is_a?(Numeric) && score.finite? && score.between?(@minimum_score, 1.0) &&
       @allowed_hostnames.include?(result['hostname'].to_s.downcase)
   end
 end

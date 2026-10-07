@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+SyllabusOrganization.seed_defaults! if SyllabusOrganization.table_exists?
+
 if Rails.env.production?
   puts 'production では db:seed で講義データを投入しません。'
   puts '講義 CSV の投入は bin/rails lectures:import_csv CSV_PATH=... を使用してください。'

@@ -3,6 +3,328 @@
 require 'rails_helper'
 
 RSpec.describe Api::V1::ReviewsController, type: :request do
+  describe 'API input boundaries' do
+    let(:user) { FactoryBot.create(:user) }
+    let(:lecture) { FactoryBot.create(:lecture) }
+    let(:headers) { { 'Authorization' => "Bearer #{JsonWebToken.encode(user.jwt_payload)}" } }
+    let(:valid_attributes) { { rating: 3, content: 'あ' * 30 } }
+
+    invalid_attributes = [
+      { rating: nil }, { rating: 0 }, { rating: 0.1 }, { rating: 5.5 }, { rating: 999 },
+      { rating: 3.3 }, { rating: '5invalid' },
+      { content: 'あ' * 29 }, { content: 'あ' * 1001 },
+      { textbook: '未定義' }, { attendance: '未定義' }, { grading_type: '未定義' },
+      { content_difficulty: '未定義' }, { content_quality: '未定義' }
+    ]
+
+    invalid_attributes.each_with_index do |attributes, index|
+      it "不正な新規入力を拒否し閲覧権限を付与しないこと（#{index + 1}）" do
+        user
+        expect do
+          post "/api/v1/lectures/#{lecture.id}/reviews", params: { review: valid_attributes.merge(attributes) },
+                                                       headers: headers, as: :json
+        end.not_to change(Review, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(user.reload.reviews_count).to eq(0)
+      end
+    end
+
+    ['invalid review shape', [{ rating: 3, content: 'あ' * 30 }]].each do |invalid_review|
+      it 'オブジェクト以外のレビュー入力を400で拒否すること' do
+        expect do
+          post "/api/v1/lectures/#{lecture.id}/reviews", params: { review: invalid_review },
+                                                       headers: headers, as: :json
+        end.not_to change(Review, :count)
+
+        expect(response).to have_http_status(:bad_request)
+      end
+    end
+
+    [[0.5, 30], [3.5, 30], [5, 1000]].each do |rating, length|
+      it "評価#{rating}・本文#{length}文字の境界値を保存すること" do
+        post "/api/v1/lectures/#{lecture.id}/reviews", params: { review: { rating: rating, content: 'あ' * length } },
+                                                     headers: headers, as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(Review.last).to have_attributes(rating: rating, content: 'あ' * length, user_id: user.id)
+        expect(user.reload.reviews_count).to eq(1)
+      end
+    end
+
+    it '編集でも評価・短文・詳細の不正値を保存しないこと' do
+      review = FactoryBot.create(:review, lecture: lecture, user: user)
+      original_attributes = review.attributes
+
+      invalid_attributes.each do |attributes|
+        patch "/api/v1/reviews/#{review.id}", params: { review: attributes }, headers: headers, as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(review.reload.attributes).to eq(original_attributes)
+      end
+    end
+
+    it '保存済みの整数評価を含む正規の編集を受理すること' do
+      review = FactoryBot.create(:review, lecture: lecture, user: user)
+
+      patch "/api/v1/reviews/#{review.id}", params: { review: { rating: review.reload.rating, content: 'い' * 30 } },
+                                          headers: headers, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(review.reload).to have_attributes(rating: 5.0, content: 'い' * 30)
+    end
+
+    it '編集画面の半星評価を新しく設定できること' do
+      review = FactoryBot.create(:review, lecture: lecture, user: user)
+
+      [0.5, 3.5].each do |rating|
+        patch "/api/v1/reviews/#{review.id}", params: { review: { rating: rating } }, headers: headers, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(review.reload.rating).to eq(rating)
+      end
+    end
+  end
+
+  describe 'reCAPTCHA client IP verification' do
+    let(:lecture) { FactoryBot.create(:lecture) }
+
+    before do
+      allow(Rails.env).to receive(:test?).and_return(false)
+      allow(ENV).to receive(:[]).and_call_original
+      allow(ENV).to receive(:[]).with('RECAPTCHA_SECRET_KEY').and_return('test-only-recaptcha-secret')
+      google_response = { success: true, score: 0.9, action: 'submit', hostname: 'gatareview.com' }.to_json
+      allow(HTTParty).to receive(:post).and_return(instance_double(HTTParty::Response, body: google_response))
+    end
+
+    { nil => '10.0.0.5', 'web.1' => '198.51.100.10' }.each do |dyno, expected_ip|
+      it "偽装ForwardedとClient-IPを使わず#{dyno ? 'Heroku観測IP' : '接続元IP'}を検証に渡すこと" do
+        allow(ENV).to receive(:[]).with('DYNO').and_return(dyno)
+
+        post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+          review: { rating: 3, content: 'あ' * 30 }, token: 'test-only-recaptcha-token'
+        }, headers: {
+          'REMOTE_ADDR' => '10.0.0.5',
+          'HTTP_X_FORWARDED_FOR' => '203.0.113.41, 198.51.100.10',
+          'HTTP_FORWARDED' => 'for=203.0.113.99',
+          'HTTP_CLIENT_IP' => '203.0.113.99'
+        }, as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(HTTParty).to have_received(:post).with(
+          'https://www.google.com/recaptcha/api/siteverify',
+          body: hash_including(remoteip: expected_ip), timeout: 10
+        )
+      end
+    end
+
+    it '検証先のタイムアウトではレビューを保存せず422で拒否すること' do
+      allow(HTTParty).to receive(:post).and_raise(Net::ReadTimeout)
+
+      expect do
+        post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+          review: { rating: 3, content: 'あ' * 30 }, token: 'test-only-recaptcha-token'
+        }, as: :json
+      end.not_to change(Review, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+  end
+
+  describe 'POST /api/v1/lectures/:lecture_id/reviews' do
+    let(:lecture) { FactoryBot.create(:lecture) }
+    let(:review_params) do
+      {
+        rating: 5,
+        content: '過年度の開講情報を指定して投稿するレビューです。講義内容を詳しく確認しました。',
+        academic_year: 2025,
+        term_code: 'C'
+      }
+    end
+    let(:offering) do
+      LectureOffering.create!(
+        lecture: lecture,
+        year: 2025,
+        registration_code: '251H2301',
+        shozoku_code: '01',
+        term_code: 'C'
+      )
+    end
+
+    it '指定したactiveな開講情報をレビューに保存すること' do
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+        review: review_params.merge(lecture_offering_id: offering.id)
+      }
+
+      expect(response).to have_http_status(:created)
+      expect(Review.last).to have_attributes(
+        lecture_id: lecture.id.to_s,
+        lecture_offering_id: offering.id,
+        academic_year: 2025,
+        term_code: 'C'
+      )
+    end
+
+    it '明示Offeringから変換表外の年度・タームを補完して保存すること' do
+      semester_offering = LectureOffering.create!(
+        lecture: lecture,
+        year: 2026,
+        registration_code: '261H2305',
+        shozoku_code: '01',
+        term_code: '1'
+      )
+
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+        review: {
+          rating: 5,
+          content: '第1学期の開講情報を指定して投稿するレビューです。講義内容を詳しく確認しました。',
+          period_year: '不明',
+          period_term: '不明',
+          lecture_offering_id: semester_offering.id
+        }
+      }
+
+      expect(response).to have_http_status(:created)
+      expect(Review.last).to have_attributes(
+        lecture_offering_id: semester_offering.id,
+        academic_year: 2026,
+        term_code: '1'
+      )
+    end
+
+    it '明示的なnullを年度だけでOfferingへ自動関連付けしないこと' do
+      offering
+
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+        review: {
+          rating: 5,
+          content: '開講区分が不明な過年度レビューです。講義内容を詳しく確認した感想を投稿しています。',
+          period_year: '2025',
+          period_term: 'その他・不明',
+          lecture_offering_id: nil
+        }
+      }
+
+      expect(response).to have_http_status(:created)
+      expect(Review.last).to have_attributes(
+        academic_year: 2025,
+        term_code: nil,
+        lecture_offering_id: nil
+      )
+    end
+
+    it '別講義・missing・存在しない開講情報を拒否すること' do
+      other_offering = LectureOffering.create!(
+        lecture: FactoryBot.create(:lecture, title: 'レビュー対象外講義'),
+        year: 2025,
+        registration_code: '251H2302',
+        shozoku_code: '01',
+        term_code: 'C'
+      )
+      missing_offering = LectureOffering.create!(
+        lecture: lecture,
+        year: 2025,
+        registration_code: '251H2303',
+        shozoku_code: '01',
+        term_code: 'C',
+        source_status: 'missing'
+      )
+
+      [other_offering.id, missing_offering.id, 0].each do |offering_id|
+        post "/api/v1/lectures/#{lecture.id}/reviews", params: {
+          review: review_params.merge(lecture_offering_id: offering_id)
+        }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+      expect(Review.where(lecture: lecture)).to be_empty
+    end
+  end
+
+  describe 'PATCH /api/v1/reviews/:id' do
+    let(:user) { FactoryBot.create(:user) }
+    let(:lecture) { FactoryBot.create(:lecture) }
+    let(:offering) do
+      LectureOffering.create!(
+        lecture: lecture,
+        year: 2026,
+        registration_code: '261H2304',
+        shozoku_code: '01',
+        term_code: 'A'
+      )
+    end
+    let(:review) do
+      FactoryBot.create(
+        :review,
+        user: user,
+        lecture: lecture,
+        lecture_offering: offering,
+        academic_year: 2026,
+        term_code: 'A'
+      )
+    end
+
+    before { allow(AuthorizeApiRequest).to receive(:call).and_return({ result: user }) }
+
+    it 'リンク済みOfferingが後からmissingになっても既存リンクを維持して更新できること' do
+      review
+      offering.update!(source_status: 'missing')
+
+      patch "/api/v1/reviews/#{review.id}", params: {
+        review: { content: '開講終了後に更新したレビュー本文です。受講した講義の内容を詳しく振り返っています。' }
+      }
+
+      expect(response).to have_http_status(:success)
+      expect(review.reload).to have_attributes(
+        content: '開講終了後に更新したレビュー本文です。受講した講義の内容を詳しく振り返っています。',
+        lecture_offering_id: offering.id
+      )
+    end
+
+    it '同年度に1件だけOfferingがあっても明示的なnullで解除すること' do
+      patch "/api/v1/reviews/#{review.id}", params: {
+        review: {
+          period_year: '2026',
+          period_term: 'その他・不明',
+          lecture_offering_id: nil
+        }
+      }
+
+      expect(response).to have_http_status(:success)
+      expect(review.reload).to have_attributes(
+        academic_year: 2026,
+        term_code: nil,
+        lecture_offering_id: nil
+      )
+    end
+
+    it 'Offering IDを省略して年度・タームを変えた場合は変更先の一意なOfferingへ付け替えること' do
+      next_offering = LectureOffering.create!(
+        lecture: lecture,
+        year: 2026,
+        registration_code: '261H2306',
+        shozoku_code: '01',
+        term_code: 'B'
+      )
+
+      patch "/api/v1/reviews/#{review.id}", params: {
+        review: {
+          period_year: '2026',
+          period_term: '2ターム',
+          academic_year: 2026,
+          term_code: 'B'
+        }
+      }
+
+      expect(response).to have_http_status(:success)
+      expect(review.reload).to have_attributes(
+        academic_year: 2026,
+        term_code: 'B',
+        lecture_offering_id: next_offering.id
+      )
+    end
+  end
+
   describe 'GET /api/v1/lectures/:lecture_id/reviews' do
     let!(:lecture) { FactoryBot.create(:lecture) }
     let!(:first_review) { FactoryBot.create(:review, lecture: lecture, content: first_content, created_at: 2.days.ago) }
