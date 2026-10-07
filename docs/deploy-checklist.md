@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | `JWT_SECRET_KEY` | Yes | 32バイト以上のランダムな専用鍵。未設定・空・短い鍵では起動を拒否する。Rails秘密鍵へのフォールバックはしない |
 | `DATABASE_URL` | Yes | 本番DBの唯一の接続先。旧 `JAWSDB_URL` への自動フォールバックはない |
-| `MYSQL_SSL_CA` | Provider-dependent | 独自CAを使う提供元では、配置したCA証明書の読み取り可能なパス。未指定時はシステムのCAを使う |
+| `MYSQL_SSL_CA` | Provider-dependent | Aivenでは必須。Ruby buildpackで同梱する `config/certs/aiven-ca.pem` の実行時パス `/app/config/certs/aiven-ca.pem` を指定する。他の提供元でも独自CAを使う場合はその証明書のパスを指定する。未指定時はライブラリ既定のCAを使う |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google ログインの token 検証値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |
 | `RECAPTCHA_SECRET_KEY` | Feature-based | 本番レビュー投稿で必要 |
@@ -31,6 +31,12 @@
 | `ADMIN_EMAILS` | Feature-based | `/admin/review-access` に入るメールアドレス |
 
 DB 移行を伴う切替は [aiven-migration-runbook.md](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/aiven-migration-runbook.md) の手順に従う。
+
+### AivenのCA証明書
+
+`config/certs/aiven-ca.pem` はAiven Consoleの接続情報から取得した公開CA証明書で、秘密鍵は含まない。証明書を含むコミットを先にデプロイしてから `MYSQL_SSL_CA` を設定する。ファイルがない旧リリースへのロールバック時には、この設定も旧リリースに合わせる必要がある。
+
+CAのローテーション通知を受けたら、Aivenが配布する現在・次期CAを含むバンドル全体でファイルを更新し、期限と接続を確認して再デプロイする。証明書検証を無効化して接続を復旧しない。[Aivenの証明書要件](https://aiven.io/docs/platform/concepts/tls-ssl-certificates)
 
 ## migration
 
