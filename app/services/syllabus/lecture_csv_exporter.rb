@@ -31,32 +31,25 @@ module Syllabus
     Result = Struct.new(:path, :row_count, :faculty_counts, keyword_init: true)
     ParsedSearchPage = Struct.new(:rows, :flow_execution_key, :total_count, :over_limit, :no_results, keyword_init: true)
 
-    def initialize(year:, output_dir: Rails.root, client: CampusSquareClient.new, timestamp: Time.current, sleeper: lambda { |seconds|
-      sleep(seconds)
-    })
+    def initialize(year:, output_dir: Rails.root, client: CampusSquareClient.new, timestamp: Time.current)
       @year = year.to_s
       @output_dir = Pathname.new(output_dir.to_s)
       @client = client
       @timestamp = timestamp
-      @sleeper = sleeper
-      @has_searched = false
     end
 
     def call
       validate_year!
       FileUtils.mkdir_p(output_dir)
 
-      rows = faculty_configs.flat_map do |faculty_config|
+      rows = FACULTY_CONFIGS.flat_map do |faculty_config|
         fetch_faculty_rows(faculty_config)
       end
 
       normalized_rows = rows
                         .map { |row| normalize_row(row) }
                         .uniq
-                        .sort_by do |title, lecturer, faculty, _year, registration_code, *_|
-        [faculty_order.fetch(faculty), title, lecturer,
-         registration_code]
-      end
+                        .sort_by { |title, lecturer, faculty| [faculty_order.fetch(faculty), title, lecturer, faculty] }
       faculty_counts = build_faculty_counts(normalized_rows)
 
       path = write_csv(normalized_rows)
@@ -65,7 +58,7 @@ module Syllabus
 
     private
 
-    attr_reader :year, :output_dir, :client, :timestamp, :sleeper
+    attr_reader :year, :output_dir, :client, :timestamp
 
     def validate_year!
       raise ArgumentError, 'YEAR is required. Example: YEAR=2026' if year.blank?
@@ -79,33 +72,30 @@ module Syllabus
           split_page = search(faculty_config[:code], term_code: term_code)
           raise Error, "#{faculty_config[:faculty]} は開講=#{term_code} でも 500 件を超過しました。追加の分割条件が必要です。" if split_page.over_limit
 
-          rows_for_page(split_page, faculty_config)
+          rows_for_page(split_page, faculty_config[:faculty])
         end
       else
-        rows_for_page(page, faculty_config)
+        rows_for_page(page, faculty_config[:faculty])
       end
     end
 
     def search(faculty_code, term_code: nil)
-      sleeper.call(1) if @has_searched
       html = client.search_results(
         year: year,
         faculty_code: faculty_code,
         term_code: term_code,
         display_count: DISPLAY_COUNT
       )
-      @has_searched = true
       parse_search_page(html)
     end
 
-    def rows_for_page(page, faculty_config)
+    def rows_for_page(page, faculty)
       return [] if page.no_results
 
-      rows = page.rows.map { |row| csv_row(row, faculty_config) }
-      return rows if rows.size >= page.total_count
+      rows = page.rows.map { |row| [row[0], row[1], faculty] }
+      return rows if page.total_count <= DISPLAY_COUNT
 
-      page_size = [page.rows.size, DISPLAY_COUNT].min
-      total_pages = (page.total_count.to_f / page_size).ceil
+      total_pages = (page.total_count.to_f / DISPLAY_COUNT).ceil
       (2..total_pages).each do |page_count|
         html = client.fetch_results_page(
           flow_execution_key: page.flow_execution_key,
@@ -113,10 +103,10 @@ module Syllabus
           display_count: DISPLAY_COUNT
         )
         parsed_page = parse_search_page(html)
-        raise Error, "#{faculty_config[:faculty]} のページング取得中に 500 件超過レスポンスが返されました。" if parsed_page.over_limit
-        raise Error, "#{faculty_config[:faculty]} のページ #{page_count} が空でした。ページング取得に失敗した可能性があります。" if parsed_page.no_results
+        raise Error, "#{faculty} のページング取得中に 500 件超過レスポンスが返されました。" if parsed_page.over_limit
+        raise Error, "#{faculty} のページ #{page_count} が空でした。ページング取得に失敗した可能性があります。" if parsed_page.no_results
 
-        rows.concat(parsed_page.rows.map { |row| csv_row(row, faculty_config) })
+        rows.concat(parsed_page.rows.map { |row| [row[0], row[1], faculty] })
       end
 
       rows
@@ -159,15 +149,11 @@ module Syllabus
         cells = row.css('td')
         next if cells.size < 7
 
-        semester_label = compact_text(cells[1].text)
-        term_label = compact_text(cells[2].text)
-        day_periods = normalize_day_periods(cells[3].text)
-        registration_code = compact_text(cells[4].text)
         title = compact_text(cells[5].text)
         lecturer = normalize_lecturer(cells[6].text)
         next if title.blank? || lecturer.blank?
 
-        parsed_rows << [title, lecturer, semester_label, term_label, day_periods, registration_code]
+        parsed_rows << [title, lecturer]
       end
     end
 
@@ -185,28 +171,7 @@ module Syllabus
       [
         compact_text(row[0]),
         normalize_lecturer(row[1]),
-        compact_text(row[2]),
-        row[3].to_i,
-        compact_text(row[4]),
-        compact_text(row[5]),
-        compact_text(row[6]),
-        compact_text(row[7]),
-        normalize_day_periods(row[8])
-      ]
-    end
-
-    def csv_row(row, faculty_config)
-      title, lecturer, semester_label, term_label, day_periods, registration_code = row
-      [
-        title,
-        lecturer,
-        faculty_config[:faculty],
-        year,
-        registration_code,
-        faculty_config[:code],
-        semester_label,
-        term_label,
-        day_periods
+        compact_text(row[2])
       ]
     end
 
@@ -216,12 +181,6 @@ module Syllabus
 
     def normalize_lecturer(text)
       text.to_s.tr("\u00A0", ' ').tr('　', ' ').gsub(/[[:space:]]+/, ' ').strip
-    end
-
-    def normalize_day_periods(text)
-      normalized = compact_text(text).tr('０１２３４５６７', '01234567')
-      slots = normalized.scan(/([月火水木金土日])\s*([1-7])/).map { |day, period| "#{day}#{period}" }
-      slots.any? ? slots.join('|') : normalized
     end
 
     def write_csv(rows)
@@ -252,28 +211,15 @@ module Syllabus
     end
 
     def faculty_order
-      @faculty_order ||= faculty_configs.each_with_index.to_h { |config, index| [config[:faculty], index] }
+      @faculty_order ||= FACULTY_CONFIGS.each_with_index.to_h { |config, index| [config[:faculty], index] }
     end
 
     def build_faculty_counts(rows)
-      counts = faculty_configs.to_h { |config| [config[:faculty], 0] }
-      rows.each do |(_, _, faculty, *)|
+      counts = FACULTY_CONFIGS.to_h { |config| [config[:faculty], 0] }
+      rows.each do |(_, _, faculty)|
         counts[faculty] += 1 if counts.key?(faculty)
       end
       counts
-    end
-
-    def faculty_configs
-      @faculty_configs ||= begin
-        configs = if defined?(SyllabusOrganization) && SyllabusOrganization.table_exists?
-                    SyllabusOrganization.enabled.for_year(year.to_i).order(:id).map do |organization|
-                      { code: organization.code, faculty: organization.faculty_label }
-                    end
-                  else
-                    []
-                  end
-        configs.presence || FACULTY_CONFIGS
-      end
     end
   end
 end
