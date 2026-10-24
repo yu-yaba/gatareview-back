@@ -86,7 +86,7 @@ heroku run bin/rails db:migrate -a gatareview-back
 
 ## 2026年10月のセキュリティ更新
 
-- Ruby 3.4.11 / Rails 8.1.4 / Puma 7.2.1を使用する。
+- Ruby 3.4.12 / Rails 8.1.4 / Puma 7.2.1を使用する。
 - 既存の十分に強い `JWT_SECRET_KEY` は維持できる。鍵を変更すると既存ユーザーは再ログインが必要になる。
 - `token_version` を含む未適用のmigrationを、フロントの更新前に実行する。
 - API失効に失敗した場合、フロントはログアウトを完了せず再試行を案内する。
@@ -103,4 +103,4 @@ heroku run bin/rails db:migrate -a gatareview-back
 
 - シラバスの取得は管理用のコマンドに限定している。HTTPSの設定済み配信元と同じホスト・ポートへのリダイレクトだけを許可し、別ホスト、HTTP、認証情報を含むURLは接続前に拒否する。
 - Dockerイメージには環境変数ファイル、Railsの復号鍵、DBダンプ、ブラウザ操作の記録や確認画像を含めない。環境変数と鍵は実行環境で管理する。
-- CIはMySQL 8.4.12を使う。ローカルの旧DBは別ボリュームへ移す [移行手順](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/mysql84-local-migration.md) に従い、本番DBも提供元のバージョンとサポート期限を確認する。
+- CIはMySQL 8.4.13を使う。ローカルの旧DBは別ボリュームへ移す [移行手順](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/mysql84-local-migration.md) に従い、本番DBも提供元のバージョンとサポート期限を確認する。

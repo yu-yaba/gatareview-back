@@ -38,7 +38,7 @@
 
 | 領域 | 技術 |
 | --- | --- |
-| Language | Ruby 3.4.11 |
+| Language | Ruby 3.4.12 |
 | Framework | Rails 8.1.4 |
 | API | Rails API mode |
 | Database | MySQL |
@@ -60,7 +60,7 @@ spec/factories/           Factory Bot
 
 ## 前提
 
-- Ruby 3.4.11
+- Ruby 3.4.12
 - Bundler
 - MySQL 8 系を推奨
 - 実運用と同じ確認をしたい場合は Docker 実行を推奨

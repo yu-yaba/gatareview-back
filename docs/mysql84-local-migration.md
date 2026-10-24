@@ -1,8 +1,8 @@
 # ローカル MySQL 8.4 への移行
 
-CI は Oracle 公式レジストリの MySQL 8.4.12 を使います。DockerHub の同名タグは配布されていないため、`container-registry.oracle.com/mysql/community-server` を指定します。既存のローカル DB データを保持するため、通常の `docker-compose.yml` は 8.0 系の最終版 8.0.46 に留め、8.4 は別のボリュームを使う追加設定で起動します。8.0 はサポート終了のため、移行を終えた後は追加設定を使ってください。[MySQL 公式リリースノート](https://dev.mysql.com/doc/relnotes/mysql/8.0/en/)
+CI は Oracle 公式レジストリの MySQL 8.4.13 を使い、`container-registry.oracle.com/mysql/community-server` を指定します。既存のローカル DB データを保持するため、通常の `docker-compose.yml` は 8.0 系の最終版 8.0.46 に留め、8.4 は別のボリュームを使う追加設定で起動します。8.0 はサポート終了のため、移行を終えた後は追加設定を使ってください。[MySQL 公式リリースノート](https://dev.mysql.com/doc/relnotes/mysql/8.0/en/)
 
-追加設定の既定タグ `8.4.12-aarch64` は Apple Silicon 向けです。Intel Mac や Linux amd64 では、`MYSQL84_IMAGE_TAG=8.4.12` を設定して同じ手順を実行します。CI は amd64 タグを使います。8.4.12 は Docker イメージを対象にしたセキュリティ更新です。[8.4.12 の公式告知](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/news-8-4-12.html)
+追加設定の既定タグ `8.4.13-aarch64` は Apple Silicon 向けです。Intel Mac や Linux amd64 では、`MYSQL84_IMAGE_TAG=8.4.13` を設定して同じ手順を実行します。CI は amd64 タグを使います。8.4.13 はセキュリティ修正を含む更新です。[8.4.13 の公式告知](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/news-8-4-13.html)
 
 ## 既存データを移す手順
 

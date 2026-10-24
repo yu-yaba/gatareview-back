@@ -1,5 +1,5 @@
 # 使用するベースイメージ
-FROM ruby:3.4.11
+FROM ruby:3.4.12
 
 # 作業ディレクトリを作成
 RUN mkdir /app
@@ -17,8 +17,8 @@ RUN apt-get update -qq && \
 COPY Gemfile Gemfile.lock /app/
 
 # bundlerのインストールとbundle installを実行
-RUN gem install bundler && \
-    bundle install
+RUN gem install bundler -v 2.6.9 --no-document && \
+    bundle _2.6.9_ install
 
 # その他のプロジェクトファイルをコピー
 COPY . /app
