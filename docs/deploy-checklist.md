@@ -104,3 +104,9 @@ heroku run bin/rails db:migrate -a gatareview-back
 - シラバスの取得は管理用のコマンドに限定している。HTTPSの設定済み配信元と同じホスト・ポートへのリダイレクトだけを許可し、別ホスト、HTTP、認証情報を含むURLは接続前に拒否する。
 - Dockerイメージには環境変数ファイル、Railsの復号鍵、DBダンプ、ブラウザ操作の記録や確認画像を含めない。環境変数と鍵は実行環境で管理する。
 - CIはMySQL 8.4.13を使う。ローカルの旧DBは別ボリュームへ移す [移行手順](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/mysql84-local-migration.md) に従い、本番DBも提供元のバージョンとサポート期限を確認する。
+
+## DB接続の再利用
+
+- 本番の `idle_timeout` は1800秒。接続上限・TLS・実行ユーザーは変更しない。[設定と検証方法](database-connection-reuse.md)を参照する。
+- 反映後は設定値、接続プールの上限、TLS、同じプロセス内での接続再利用と主要APIの応答を確認する。
+- 問題が出た場合は、この変更前のリリースへ戻す。データ形式とスキーマの変更はない。
