@@ -24,6 +24,9 @@ jobs:
     env:
       RAILS_ENV: test
       JWT_SECRET_KEY: ci-only-jwt-secret-with-at-least-32-bytes
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ""
 
     steps:
       - name: Checkout code
@@ -37,9 +40,6 @@ jobs:
 
       - name: Install dependencies
         run: bundle install --jobs 4 --retry 3
-
-      - name: Copy database configuration
-        run: cp config/database.yml.ci config/database.yml
 
       - name: Set up database
         run: |
