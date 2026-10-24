@@ -57,27 +57,12 @@ module Api
           @lectures = @lectures.order(:id)
         end
 
-        # 総件数を効率的に取得（詳細検索やGROUP BYの場合を適切に処理）
-        count_result = @lectures.except(:order, :limit, :offset).count
-        total_count = count_result.is_a?(Hash) ? count_result.size : count_result
+        # 件数だけをDB内で集計し、授業ごとの集計結果を転送しない。
+        total_count = @lectures.except(:order, :limit, :offset, :group).distinct.count(:id)
 
         # ページネーション（limit/offsetを使用）
         offset = (page - 1) * per_page
         @lectures = @lectures.limit(per_page).offset(offset)
-
-        # 結果が空の場合
-        if @lectures.empty?
-          render json: {
-            lectures: [],
-            pagination: {
-              current_page: page,
-              total_pages: (total_count.to_f / per_page).ceil,
-              total_count: total_count,
-              per_page: per_page
-            }
-          }
-          return
-        end
 
         # JSON化（N+1問題を回避）
         @lectures_json = Lecture.as_json_reviews(@lectures)
@@ -123,12 +108,7 @@ module Api
                           .order('COUNT(reviews.id) DESC')
                           .limit(4)
 
-        if @lectures.any?
-          lectures_json = Lecture.as_json_reviews(@lectures)
-          render json: { lectures: lectures_json }
-        else
-          render json: { lectures: [] }
-        end
+        render json: { lectures: Lecture.as_json_reviews(@lectures) }
       end
 
       def no_reviews
@@ -144,12 +124,7 @@ module Api
                                             .offset(offset)
                                             .limit(limit)
 
-        if @lectures.any?
-          lectures_json = Lecture.as_json_reviews(@lectures)
-          render json: { lectures: lectures_json }
-        else
-          render json: { lectures: [] }
-        end
+        render json: { lectures: Lecture.as_json_reviews(@lectures) }
       end
 
       private

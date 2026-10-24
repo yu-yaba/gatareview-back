@@ -53,6 +53,50 @@ RSpec.describe Api::V1::LecturesController, type: :request do
         end
       end
     end
+
+    context '複数レビューがある授業をページ分割する場合' do
+      let!(:reviewed_lectures) { FactoryBot.create_list(:lecture, 21) }
+      let!(:unreviewed_lectures) { FactoryBot.create_list(:lecture, 4) }
+
+      before do
+        reviewed_lectures.each do |lecture|
+          FactoryBot.create_list(:review, 2, lecture: lecture)
+        end
+      end
+
+      {
+        'newest' => 25,
+        'highestRating' => 21,
+        'mostReviewed' => 21,
+        'unknown' => 25
+      }.each do |sort, expected_count|
+        it "#{sort}で授業数を数え、2ページ目にも正しい件数と統計を返すこと" do
+          get '/api/v1/lectures', params: { sort: sort, page: 2 }
+
+          expect(response).to have_http_status(:ok)
+          json = response.parsed_body
+          expect(json.fetch('pagination')).to include(
+            'current_page' => 2, 'total_pages' => 2, 'total_count' => expected_count, 'per_page' => 20
+          )
+          expect(json.fetch('lectures').size).to eq(expected_count - 20)
+          json.fetch('lectures').each do |lecture|
+            reviewed = reviewed_lectures.any? { |record| record.id == lecture.fetch('id') }
+            expect(lecture.fetch('review_count')).to eq(reviewed ? 2 : 0)
+            expect(lecture.fetch('avg_rating')).to eq(reviewed ? 5 : 0)
+          end
+        end
+      end
+
+      it '最終ページの先でも総件数を維持して空配列を返すこと' do
+        get '/api/v1/lectures', params: { page: 3 }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body.fetch('lectures')).to eq([])
+        expect(response.parsed_body.fetch('pagination')).to include(
+          'current_page' => 3, 'total_pages' => 2, 'total_count' => 25
+        )
+      end
+    end
   end
 
   describe 'GET /api/v1/lectures/:id' do

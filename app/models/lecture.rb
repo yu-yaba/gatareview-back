@@ -19,40 +19,17 @@ class Lecture < ApplicationRecord
     where("title LIKE ? OR lecturer LIKE ?", sanitized_query, sanitized_query)
   }
 
-  def self.average_rating(lectures)
-    # 効率的な平均評価計算
-    # DISTINCTクエリの場合、pluckが問題を起こす可能性があるため安全に取得
-    lecture_ids = if lectures.is_a?(ActiveRecord::Relation)
-                    # DISTINCTクエリの場合は一度materializeしてからmap
-                    lectures.to_a.map(&:id)
-                  else
-                    lectures.map(&:id)
-                  end
-    return {} if lecture_ids.empty?
-
-    Review.where(lecture_id: lecture_ids)
-          .group(:lecture_id)
-          .average(:rating)
-  end
-
   def self.as_json_reviews(lectures)
-    # 一度に全ての平均評価を取得
-    avg_ratings = average_rating(lectures)
+    records = lectures.select(:id, :title, :lecturer, :faculty, :created_at, :updated_at).to_a
+    return [] if records.empty?
 
-    # レビュー数も一度に取得（必要な場合のみ）
-    # DISTINCTクエリの場合、pluckが問題を起こす可能性があるため安全に取得
-    lecture_ids = if lectures.is_a?(ActiveRecord::Relation)
-                    # DISTINCTクエリの場合は一度materializeしてからpluck
-                    lectures.to_a.map(&:id)
-                  else
-                    lectures.map(&:id)
-                  end
-    review_counts = Review.where(lecture_id: lecture_ids)
-                          .group(:lecture_id)
-                          .count
+    statistics = Review.where(lecture_id: records.map(&:id))
+                       .group(:lecture_id)
+                       .pluck(:lecture_id, Arel.sql('AVG(rating)'), Arel.sql('COUNT(*)'))
+                       .to_h { |id, average, count| [id, [average, count]] }
 
-    # 必要なカラムのみ選択して効率化
-    lectures.select(:id, :title, :lecturer, :faculty, :created_at, :updated_at).map do |lecture|
+    records.map do |lecture|
+      average, count = statistics.fetch(lecture.id.to_s, [0, 0])
       {
         id: lecture.id,
         title: lecture.title,
@@ -60,21 +37,18 @@ class Lecture < ApplicationRecord
         faculty: lecture.faculty,
         created_at: lecture.created_at,
         updated_at: lecture.updated_at,
-        avg_rating: (avg_ratings[lecture.id.to_s] || 0).round(1),
-        review_count: review_counts[lecture.id.to_s] || 0
+        avg_rating: (average || 0).round(1),
+        review_count: count
       }
     end
   end
 
   def as_json_with_reviews
-    # 関連するレビューの平均評価と数を計算
-    # to_f を使って小数点以下の除算を保証
-    avg_rating = reviews.average(:rating) || 0
-    review_count = reviews.count
+    avg_rating, review_count = reviews.pick(Arel.sql('AVG(rating)'), Arel.sql('COUNT(*)'))
 
     # as_jsonで基本属性を取得し、追加情報をマージ
     as_json.merge(
-      avg_rating: avg_rating.round(1),
+      avg_rating: (avg_rating || 0).round(1),
       review_count: review_count
     )
   end
