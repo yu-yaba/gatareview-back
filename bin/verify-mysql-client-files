@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+client_root="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
+cd "$client_root"
+if ! sha256sum --check --status config/mysql-client-files.sha256; then
+  echo 'MySQL client file verification failed; refusing to start.' >&2
+  exit 1
+fi

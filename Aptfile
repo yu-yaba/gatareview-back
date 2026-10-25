@@ -1,0 +1,6 @@
+# Oracle MySQL client only; no database server packages. See docs/mysql-client-security.md.
+https://repo.mysql.com/apt/ubuntu/pool/mysql-8.4-lts/m/mysql-community/libmysqlclient24_8.4.13-1ubuntu24.04_amd64.deb
+https://repo.mysql.com/apt/ubuntu/pool/mysql-8.4-lts/m/mysql-community/mysql-common_8.4.13-1ubuntu24.04_amd64.deb
+https://repo.mysql.com/apt/ubuntu/pool/mysql-8.4-lts/m/mysql-community/mysql-community-client_8.4.13-1ubuntu24.04_amd64.deb
+https://repo.mysql.com/apt/ubuntu/pool/mysql-8.4-lts/m/mysql-community/mysql-community-client-core_8.4.13-1ubuntu24.04_amd64.deb
+https://repo.mysql.com/apt/ubuntu/pool/mysql-8.4-lts/m/mysql-community/mysql-community-client-plugins_8.4.13-1ubuntu24.04_amd64.deb
