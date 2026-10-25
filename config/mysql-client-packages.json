@@ -1,0 +1,47 @@
+[
+  {
+    "Package": "libmysqlclient24",
+    "Version": "8.4.13-1ubuntu24.04",
+    "Architecture": "amd64",
+    "Filename": "pool/mysql-8.4-lts/m/mysql-community/libmysqlclient24_8.4.13-1ubuntu24.04_amd64.deb",
+    "Size": "1528730",
+    "SHA256": "7f0340bd2ccec1ea2363c4271ce414eb1604e9f41bcddd74c2fe88a59a221815",
+    "Depends": "mysql-common (>= 8.4.13-1ubuntu24.04), mysql-community-client-plugins (= 8.4.13-1ubuntu24.04), libc6 (>= 2.38), libgcc-s1 (>= 3.4), libssl3t64 (>= 3.0.0), libstdc++6 (>= 13.1), zlib1g (>= 1:1.1.4)"
+  },
+  {
+    "Package": "mysql-common",
+    "Version": "8.4.13-1ubuntu24.04",
+    "Architecture": "amd64",
+    "Filename": "pool/mysql-8.4-lts/m/mysql-community/mysql-common_8.4.13-1ubuntu24.04_amd64.deb",
+    "Size": "60114",
+    "SHA256": "59aeb18243576cfa002c5345e59fee8593b532c28c85435e9906528e7786c39e",
+    "Depends": null
+  },
+  {
+    "Package": "mysql-community-client",
+    "Version": "8.4.13-1ubuntu24.04",
+    "Architecture": "amd64",
+    "Filename": "pool/mysql-8.4-lts/m/mysql-community/mysql-community-client_8.4.13-1ubuntu24.04_amd64.deb",
+    "Size": "2689446",
+    "SHA256": "e83994ae62a5d2fced1cd77e63ec24a3b0c97cd4d8e81b74b41b14ac37b6d060",
+    "Depends": "mysql-common (>= 8.4.13-1ubuntu24.04), libc6 (>= 2.38), libgcc-s1 (>= 3.4), libssl3t64 (>= 3.0.0), libstdc++6 (>= 13.1), zlib1g (>= 1:1.2.11), mysql-community-client-core (= 8.4.13-1ubuntu24.04)"
+  },
+  {
+    "Package": "mysql-community-client-core",
+    "Version": "8.4.13-1ubuntu24.04",
+    "Architecture": "amd64",
+    "Filename": "pool/mysql-8.4-lts/m/mysql-community/mysql-community-client-core_8.4.13-1ubuntu24.04_amd64.deb",
+    "Size": "1824254",
+    "SHA256": "2bcb554edd33141ac5d54579fd8ab9dc5dbeca255a0a5e29cca7ece9afa7d21e",
+    "Depends": "libc6 (>= 2.38), libgcc-s1 (>= 3.4), libssl3t64 (>= 3.0.0), libstdc++6 (>= 13.1), libtinfo6 (>= 6), zlib1g (>= 1:1.1.4), mysql-community-client-plugins (= 8.4.13-1ubuntu24.04)"
+  },
+  {
+    "Package": "mysql-community-client-plugins",
+    "Version": "8.4.13-1ubuntu24.04",
+    "Architecture": "amd64",
+    "Filename": "pool/mysql-8.4-lts/m/mysql-community/mysql-community-client-plugins_8.4.13-1ubuntu24.04_amd64.deb",
+    "Size": "1452468",
+    "SHA256": "6812f8ab63482a3065da19a7cf807f0999073476ed6131561799e6ba9ec8bcc7",
+    "Depends": "libc6 (>= 2.38), libgcc-s1 (>= 3.3.1), libgssapi-krb5-2 (>= 1.17), libkrb5-3 (>= 1.6.dfsg.2), libsasl2-2 (>= 2.1.28+dfsg1), libssl3t64 (>= 3.0.0), libstdc++6 (>= 13.1), libudev1 (>= 183), zlib1g (>= 1:1.1.4)"
+  }
+]

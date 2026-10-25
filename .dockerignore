@@ -1,5 +1,6 @@
 .git
 .gitignore
+.apt
 .DS_Store
 
 # Environment files (never bake secrets into images)

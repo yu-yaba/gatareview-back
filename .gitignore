@@ -29,6 +29,7 @@
 /config/master.key
 
 .env
+/.apt/
 .env.*
 !.env*.example
 /config/credentials/*.key
