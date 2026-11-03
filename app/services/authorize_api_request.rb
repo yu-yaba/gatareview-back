@@ -1,4 +1,6 @@
 class AuthorizeApiRequest
+  MAX_AUTHORIZATION_HEADER_BYTES = 16 * 1024
+
   def initialize(headers = {})
     @headers = headers
   end
@@ -35,23 +37,18 @@ class AuthorizeApiRequest
   def http_auth_header
     auth_header = headers['Authorization']
 
-    # セキュリティ/ノイズ対策: 本番環境では認証ヘッダーの詳細ログを出さない
-    log_auth_debug("Authorization header present: #{auth_header.present?}")
-
-    if auth_header.present?
-      # Bearer形式の厳密な検証
-      match = auth_header.match(/\ABearer\s+(.+)\z/)
-      if match
-        log_auth_debug('Valid Bearer token extracted')
-        return match[1]
-      else
-        Rails.logger.warn "Invalid Authorization header format - must be 'Bearer <token>'"
-        return nil
-      end
+    unless auth_header.is_a?(String) && !auth_header.empty?
+      log_auth_debug('No Authorization header found')
+      return
     end
 
-    log_auth_debug('No Authorization header found')
-    nil
+    token = auth_header[/\ABearer[ \t]+(\S+)\z/, 1] if auth_header.bytesize <= MAX_AUTHORIZATION_HEADER_BYTES
+    if token
+      log_auth_debug('Valid Bearer token extracted')
+    else
+      Rails.logger.warn "Invalid Authorization header format - must be 'Bearer <token>'"
+    end
+    token
   end
 
   def log_auth_debug(message)
