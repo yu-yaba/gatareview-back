@@ -1,0 +1,39 @@
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ruby-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/.github/security/Gemfile
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby and security tools
+        uses: ruby/setup-ruby@de492cf36cbab201753d720ce4f4e336cd688c94 # v1
+        with:
+          ruby-version: "3.4.12"
+          bundler-cache: true
+
+      - name: Check application dependencies
+        run: bundle exec bundler-audit check --update --gemfile-lock Gemfile.lock
+
+      - name: Check security tool dependencies
+        if: ${{ !cancelled() }}
+        run: bundle exec bundler-audit check --gemfile-lock .github/security/Gemfile.lock
+
+      - name: Scan Rails application
+        if: ${{ !cancelled() }}
+        run: bundle exec brakeman --no-pager --quiet
