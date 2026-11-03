@@ -62,7 +62,7 @@ gem 'mysql2', '~> 0.5.6'
 gem 'rspec-rails'
 
 # Keep CI lint behavior stable during the Rails upgrade.
-gem 'rubocop', '1.69.1', require: false
+gem 'rubocop', '1.92.2', require: false
 
 gem 'factory_bot_rails'
 
