@@ -19,6 +19,10 @@ gem 'puma', '~> 7.2', '>= 7.2.1'
 
 gem 'httparty'
 
+# Error monitoring; enabled only when a production DSN is configured.
+gem 'sentry-ruby', '~> 7.2'
+gem 'sentry-rails', '~> 7.2'
+
 gem 'dotenv-rails', groups: %i[development test]
 
 gem 'recaptcha', require: 'recaptcha/rails'
