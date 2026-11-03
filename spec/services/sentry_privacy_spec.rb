@@ -28,7 +28,12 @@ RSpec.describe Monitoring::SentryPrivacy do
       Sentry.capture_exception(exception)
     end
 
-    event = Sentry.get_current_client.transport.events.last.to_h
+    transport = Sentry.get_current_client.transport
+    sent = transport.events.last
+    serialized, = transport.serialize_envelope(transport.envelope_from_event(sent))
+    expect(JSON.parse(serialized.lines[1])['type']).to eq('event')
+    expect(serialized).not_to include(marker)
+    event = sent.to_h
     expect(event.to_json).not_to include(marker)
     expect(event.dig(:exception, :values, 0, :type)).to eq('ArgumentError')
     expect(event.dig(:exception, :values, 0, :stacktrace, :frames, 0, :lineno)).to eq(12)

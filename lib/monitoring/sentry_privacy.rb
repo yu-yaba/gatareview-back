@@ -21,7 +21,7 @@ module Monitoring
 
     def self.scrub(event, _hint)
       data = event.to_h
-      payload = data.slice(*EVENT_FIELDS).merge(message: MESSAGE, tags: { service: 'gatareview-back' })
+      payload = data.slice(*EVENT_FIELDS).merge(type: 'event', message: MESSAGE, tags: { service: 'gatareview-back' })
       payload[:exception] = { values: data[:exception][:values].map { |value| safe_exception(value) } } if data[:exception]
       FilteredEvent.new(event, payload)
     end
