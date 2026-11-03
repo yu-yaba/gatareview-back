@@ -302,6 +302,13 @@ GEM
       prism (~> 1.7)
     ruby-progressbar (1.13.0)
     securerandom (0.4.1)
+    sentry-rails (7.2.0)
+      railties (>= 5.2.0)
+      sentry-ruby (~> 7.2.0)
+    sentry-ruby (7.2.0)
+      bigdecimal
+      concurrent-ruby (~> 1.0, >= 1.0.2)
+      logger
     solargraph (0.56.2)
       backport (~> 1.2)
       benchmark (~> 0.4)
@@ -371,6 +378,8 @@ DEPENDENCIES
   recaptcha
   rspec-rails
   rubocop (= 1.69.1)
+  sentry-rails (~> 7.2)
+  sentry-ruby (~> 7.2)
   solargraph
   tzinfo-data
 
