@@ -167,6 +167,36 @@ RSpec.describe 'Api::V1::Auth', type: :request do
   end
 
   describe 'GET /api/v1/auth/me' do
+    it 'accepts horizontal whitespace between Bearer and a valid token' do
+      get '/api/v1/auth/me', headers: { 'Authorization' => "Bearer \t #{token}" }
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'rejects an oversized authorization header without disclosing user data' do
+      authorization = "Bearer #{' ' * (32 * 1024)}#{token}"
+      get '/api/v1/auth/me', headers: { 'Authorization' => authorization }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.body).not_to include(user.email)
+    end
+
+    it 'rejects a valid token followed by whitespace or an extra token' do
+      ["Bearer #{token} ", "Bearer #{token} extra"].each do |authorization|
+        get '/api/v1/auth/me', headers: { 'Authorization' => authorization }
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.body).not_to include(user.email)
+      end
+    end
+
+    it 'does not authenticate from a cookie without an authorization header' do
+      get '/api/v1/auth/me', headers: { 'Cookie' => "token=#{token}; jwt=#{token}" }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.body).not_to include(user.email)
+    end
+
     it 'rejects legacy JWTs without a token version' do
       legacy_token = JsonWebToken.encode({ user_id: user.id }, 1.hour.from_now)
 

@@ -1,0 +1,22 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    brakeman (8.1.0)
+      racc
+    bundler-audit (0.9.3)
+      bundler (>= 1.2.0)
+      thor (~> 1.0)
+    racc (1.8.1)
+    thor (1.5.0)
+
+PLATFORMS
+  arm64-darwin-25
+  ruby
+  x86_64-linux
+
+DEPENDENCIES
+  brakeman (~> 8.1)
+  bundler-audit (~> 0.9)
+
+BUNDLED WITH
+   2.7.1
