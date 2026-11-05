@@ -97,7 +97,7 @@ RSpec.describe 'API adversarial input boundaries', type: :request do
     %w[period_year period_term].each do |attribute|
       it "rejects an overlong #{attribute} before writing to MySQL" do
         post "/api/v1/lectures/#{lecture.id}/reviews",
-             params: { review: valid_review.merge(attribute => 'x' * 256) }, as: :json
+             params: { review: valid_review.merge(attribute.to_sym => 'x' * 256) }, as: :json
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(Review.count).to eq(0)
