@@ -39,7 +39,7 @@
 | 領域 | 技術 |
 | --- | --- |
 | Language | Ruby 3.4.12 |
-| Framework | Rails 8.1.4 |
+| Framework | Rails 8.1.4.1 |
 | API | Rails API mode |
 | Database | MySQL |
 | Auth | JWT, Google OAuth |

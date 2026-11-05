@@ -44,7 +44,7 @@ docker-compose exec gatareview-back bin/rails console
 前提バージョン:
 
 - Ruby `3.4.12`
-- Rails `8.1.4`
+- Rails `8.1.4.1`
 
 ## 実装上の重要ポイント
 
