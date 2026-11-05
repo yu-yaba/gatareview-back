@@ -2,10 +2,13 @@
 
 # Heroku's router only vouches for X-Forwarded-For. Forwarded and Client-Ip
 # arrive straight from the client, and RateLimitDiscriminator already ignores
-# them. Drop them before ActionDispatch::RemoteIp so that:
+# them. Drop them at the very top of the middleware stack, before
+# ActionDispatch::HostAuthorization, ActionDispatch::SSL and
+# ActionDispatch::RemoteIp read them, so that:
 # - Rails' remote_ip (used in request logs) cannot be steered by them,
 # - Rack cannot derive the request scheme or host from a client-supplied
-#   `Forwarded: proto=...;host=...`, and
+#   `Forwarded: proto=...;host=...` (e.g. `proto=http` would otherwise make
+#   force_ssl answer with a 301), and
 # - a client sending conflicting headers cannot make every request fail with
 #   IpSpoofAttackError.
 #
@@ -27,4 +30,6 @@ class StripUntrustedForwardingHeaders
   end
 end
 
-Rails.application.config.middleware.insert_before ActionDispatch::RemoteIp, StripUntrustedForwardingHeaders
+# Index 0 is also used by config/initializers/cors.rb; this file loads later, so
+# it ends up in front of Rack::Cors as well.
+Rails.application.config.middleware.insert_before 0, StripUntrustedForwardingHeaders

@@ -12,10 +12,23 @@ RSpec.describe StripUntrustedForwardingHeaders, type: :request do
     }
   end
 
-  it 'RemoteIpより前に組み込まれていること' do
-    middlewares = Rails.application.middleware.map(&:klass)
+  it 'ミドルウェアの先頭に組み込まれていること' do
+    expect(Rails.application.middleware.first.klass).to eq(described_class)
+  end
 
-    expect(middlewares.index(described_class)).to be < middlewares.index(ActionDispatch::RemoteIp)
+  it 'force_sslがForwardedのproto=httpを見て301を返さないこと' do
+    ssl = ActionDispatch::SSL.new(->(_env) { [200, {}, ['ok']] })
+    # Heroku forwards to the dyno over http and vouches for https via X-Forwarded-Proto.
+    heroku_env = lambda do
+      Rack::MockRequest.env_for(
+        'http://gatareview-back.example/api/v1/reviews/total',
+        'HTTP_X_FORWARDED_PROTO' => 'https',
+        'HTTP_FORWARDED' => 'proto=http'
+      )
+    end
+
+    expect(ssl.call(heroku_env.call).first).to eq(301)
+    expect(described_class.new(ssl).call(heroku_env.call).first).to eq(200)
   end
 
   it 'ForwardedとClient-Ipだけを取り除き、X-Forwarded-Forは残すこと' do
