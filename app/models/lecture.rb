@@ -13,11 +13,23 @@ class Lecture < ApplicationRecord
   validates :title, uniqueness: { scope: %i[lecturer faculty] }
 
   # 検索用スコープ（MySQL対応：LIKEを使用した大文字小文字を区別しない検索）
-  scope :search_by_title_and_lecturer, ->(query) {
-    sanitized_query = "%#{sanitize_sql_like(query.to_s)}%"
-    # MySQLではLIKEがデフォルトで大文字小文字を区別しないため、ILIKEの代わりにLIKEを使用
-    where("title LIKE ? OR lecturer LIKE ?", sanitized_query, sanitized_query)
+  # 空白だけの検索語は条件なしとして扱う。
+  scope :search_by_title_and_lecturer, lambda { |query|
+    keyword = normalize_search_keyword(query)
+    if keyword.present?
+      sanitized_query = "%#{sanitize_sql_like(keyword)}%"
+      # MySQLではLIKEがデフォルトで大文字小文字を区別しないため、ILIKEの代わりにLIKEを使用
+      where('lectures.title LIKE :query OR lectures.lecturer LIKE :query', query: sanitized_query)
+    end
   }
+
+  # 前後の空白（全角スペース・タブ・改行を含む）だけを除く。
+  # 途中の空白はそのまま残す。既存データには「伊藤  守」のように空白が2つ続く担当教員名があり、
+  # まとめるとその名前をそのまま貼り付けた検索で見つからなくなるため。
+  # なお照合順序 utf8mb4_0900_ai_ci では全角・半角スペースは同じ文字として比較される。
+  def self.normalize_search_keyword(query)
+    query.to_s.gsub(/\A[[:space:]]+|[[:space:]]+\z/, '')
+  end
 
   def self.as_json_reviews(lectures)
     records = lectures.select(:id, :title, :lecturer, :faculty, :created_at, :updated_at).to_a

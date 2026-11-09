@@ -14,55 +14,44 @@ module Api
       ].freeze
       MAX_SEARCH_PARAMETER_LENGTH = 255
       MAX_PAGE = 10_000
+      REVIEW_FILTER_PARAMETERS = %i[
+        period_year period_term textbook attendance grading_type content_difficulty content_quality
+      ].freeze
+      # CSV一括取り込みでは作成日時が同じ授業が大量にあり、評価・件数も同じ値が多い。
+      # 同じ値の授業の順序がページ（OFFSET）ごとに変わると重複・欠けが起きるため、
+      # どの並び順も最後に一意な lectures.id で順序を確定させる。
+      MOST_REVIEWED_ORDER = 'COUNT(reviews.id) DESC, lectures.id DESC'
+      SORT_ORDERS = {
+        # 評価の高い順（レビューがある授業のみ）
+        'highestRating' => 'AVG(reviews.rating) DESC, COUNT(reviews.id) DESC, lectures.id DESC',
+        # レビュー数の多い順（レビューがある授業のみ）
+        'mostReviewed' => MOST_REVIEWED_ORDER,
+        # 最新レビュー順（レビューの最新投稿日時順。レビューがない授業は最後）
+        'newest' => 'MAX(reviews.created_at) DESC, lectures.created_at DESC, lectures.id DESC'
+      }.freeze
+      REVIEWED_ONLY_SORTS = %w[highestRating mostReviewed].freeze
 
       def index
         page = @requested_page
         per_page = 20
 
-        # 効率的なクエリ構築
-        @lectures = Lecture.all
-
-        # 検索条件とソート処理
-        sort_param = params[:sort] || 'newest'
-        
-        # ソート処理
-        case sort_param
-        when 'highestRating'
-          # 評価の高い順（レビューがある授業のみ）
-          @lectures = @lectures.joins(:reviews)
-                               .group('lectures.id')
-                               .order('AVG(reviews.rating) DESC, COUNT(reviews.id) DESC')
-        when 'mostReviewed'
-          # レビュー数の多い順（レビューがある授業のみ）
-          @lectures = @lectures.joins(:reviews)
-                               .group('lectures.id')
-                               .order('COUNT(reviews.id) DESC')
-        when 'newest'
-          # 最新レビュー順（レビューの最新投稿日時順）
-          @lectures = @lectures.left_joins(:reviews)
-                               .group('lectures.id')
-                               .order('MAX(reviews.created_at) DESC, lectures.created_at DESC')
-        end
+        sort = params[:sort] || 'newest'
 
         # 基本検索（キーワード、学部）
-        @lectures = @lectures.search_by_title_and_lecturer(params[:search]) if params[:search].present?
+        lectures = Lecture.all
+        lectures = lectures.search_by_title_and_lecturer(params[:search]) if params[:search].present?
+        lectures = lectures.where(faculty: params[:faculty]) if params[:faculty].present?
 
-        @lectures = @lectures.where(faculty: params[:faculty]) if params[:faculty].present?
-
-        # レビュー詳細項目による検索（JOINを使って効率化）
-        @lectures = filter_lectures_by_review_details(@lectures) if review_search_params_present?
-
-        # GROUP BYがない場合のみ決定的なソート（IDでソート）を追加
-        unless ['highestRating', 'mostReviewed', 'newest'].include?(sort_param)
-          @lectures = @lectures.order(:id)
-        end
+        # レビュー詳細項目による絞り込み（表示する授業だけを決め、並び順の集計には影響させない）
+        review_conditions = review_detail_conditions
+        lectures = lectures.where(id: Review.where(review_conditions).select(:lecture_id)) if review_conditions.present?
 
         # 件数だけをDB内で集計し、授業ごとの集計結果を転送しない。
-        total_count = @lectures.except(:order, :limit, :offset, :group).distinct.count(:id)
+        total_count = count_lectures(lectures, sort, review_filtered: review_conditions.present?)
 
         # ページネーション（limit/offsetを使用）
         offset = (page - 1) * per_page
-        @lectures = @lectures.limit(per_page).offset(offset)
+        @lectures = sort_lectures(lectures, sort).limit(per_page).offset(offset)
 
         # JSON化（N+1問題を回避）
         @lectures_json = Lecture.as_json_reviews(@lectures)
@@ -104,9 +93,9 @@ module Api
       def popular
         # レビュー数の多い順に上位4件の講義を取得
         @lectures = Lecture.joins(:reviews)
-                          .group('lectures.id')
-                          .order('COUNT(reviews.id) DESC')
-                          .limit(4)
+                           .group('lectures.id')
+                           .order(MOST_REVIEWED_ORDER)
+                           .limit(4)
 
         render json: { lectures: Lecture.as_json_reviews(@lectures) }
       end
@@ -157,81 +146,30 @@ module Api
         end
       end
 
-      def review_search_params_present?
-        params[:period_year].present? || params[:period_term].present? ||
-          params[:textbook].present? || params[:attendance].present? ||
-          params[:grading_type].present? || params[:content_difficulty].present? ||
-          params[:content_quality].present?
+      def sort_lectures(lectures, sort)
+        case sort
+        when *REVIEWED_ONLY_SORTS
+          lectures.joins(:reviews).group('lectures.id').order(SORT_ORDERS.fetch(sort))
+        when 'newest'
+          lectures.left_joins(:reviews).group('lectures.id').order(SORT_ORDERS.fetch(sort))
+        else
+          lectures.order(:id)
+        end
       end
 
-      def filter_lectures_by_review_details(lectures)
-        conditions, params_values = build_review_search_conditions
-        return lectures if conditions.empty?
+      # 評価順・レビュー数順はレビューがある授業だけが対象。詳細条件で絞り込んだ授業には必ずレビューが
+      # あるため、その場合と、それ以外の並び順は並び替え用のJOINなしで数える。
+      def count_lectures(lectures, sort, review_filtered:)
+        return lectures.joins(:reviews).distinct.count(:id) if REVIEWED_ONLY_SORTS.include?(sort) && !review_filtered
 
-        # JOINクエリで効率的に検索し、複数ReviewによるLectureの重複を除く
-        lectures.joins(:reviews)
-                .where(conditions.join(' AND '), *params_values)
-                .distinct
+        lectures.count
       end
 
-      def count_filtered_lectures_by_review_details
-        conditions, params_values = build_review_search_conditions
-        return 0 if conditions.empty?
-
-        # 基本クエリを構築
-        base_query = Lecture.all
-
-        # 基本検索（キーワード、学部）の条件を追加
-        base_query = base_query.search_by_title_and_lecturer(params[:search]) if params[:search].present?
-        base_query = base_query.where(faculty: params[:faculty]) if params[:faculty].present?
-
-        # 詳細検索の条件を追加してDISTINCTでカウント
-        base_query.joins(:reviews)
-                  .where(conditions.join(' AND '), *params_values)
-                  .distinct
-                  .count
-      end
-
-      def build_review_search_conditions
-        conditions = []
-        params_values = []
-
-        if params[:period_year].present?
-          conditions << 'reviews.period_year = ?'
-          params_values << params[:period_year]
-        end
-
-        if params[:period_term].present?
-          conditions << 'reviews.period_term = ?'
-          params_values << params[:period_term]
-        end
-
-        if params[:textbook].present?
-          conditions << 'reviews.textbook = ?'
-          params_values << params[:textbook]
-        end
-
-        if params[:attendance].present?
-          conditions << 'reviews.attendance = ?'
-          params_values << params[:attendance]
-        end
-
-        if params[:grading_type].present?
-          conditions << 'reviews.grading_type = ?'
-          params_values << params[:grading_type]
-        end
-
-        if params[:content_difficulty].present?
-          conditions << 'reviews.content_difficulty = ?'
-          params_values << params[:content_difficulty]
-        end
-
-        if params[:content_quality].present?
-          conditions << 'reviews.content_quality = ?'
-          params_values << params[:content_quality]
-        end
-
-        [conditions, params_values]
+      # 詳細条件は「条件に合うレビューが1件以上ある授業か」だけを決める（サブクエリで絞り込む）。
+      # 並び順の集計（平均評価・件数・最新投稿日時）は、一覧に表示する値と同じく全レビューを対象にする。
+      # JOINした reviews 自体を絞ると、並び順だけが条件に合うレビューの集計になり、表示とずれる。
+      def review_detail_conditions
+        REVIEW_FILTER_PARAMETERS.index_with { |name| params[name] }.compact_blank
       end
     end
   end
