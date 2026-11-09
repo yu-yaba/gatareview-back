@@ -97,7 +97,9 @@ module Api
           return
         end
         
-        if @review.destroy
+        # ありがとうの追加・取り消しと同じくレビューの行をロックしてから消す。
+        # 処理中のありがとうを待ってから関連ごと消すので、外部キー違反で失敗しない。
+        if Review.transaction { @review.lock!.destroy }
           render json: { success: true, message: 'レビューを削除しました' }
         else
           render json: { success: false, message: 'レビューの削除に失敗しました' }, status: :unprocessable_entity

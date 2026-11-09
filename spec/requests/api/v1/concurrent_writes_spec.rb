@@ -125,4 +125,22 @@ RSpec.describe '同時に届いた書き込み', type: :request do
       expect(review.reload.thanks_count).to eq(Thank.where(review: review).count).and eq(senders.size)
     end
   end
+
+  it '投稿者がレビューを削除する間にありがとうが届いても、500にならず関連も残さないこと' do
+    thankers = Array.new(concurrency - 1) { create(:user) }
+
+    5.times do
+      review = create(:review, lecture: create(:lecture), user: user)
+      requests = [['DELETE', "/api/v1/reviews/#{review.id}", {}, token]] +
+                 thankers.map { |thanker| ['POST', "/api/v1/reviews/#{review.id}/thanks", {}, token_for(thanker)] }
+
+      statuses = concurrent_requests(requests)
+
+      expect(statuses).to include(['DELETE', 200] => 1)
+      expect(statuses.keys - [['DELETE', 200], ['POST', 201], ['POST', 404]]).to eq([])
+      expect(Review.exists?(review.id)).to be(false)
+      expect(Thank.where(review_id: review.id).count).to eq(0)
+    end
+    expect(user.reload.reviews_count).to eq(0)
+  end
 end
