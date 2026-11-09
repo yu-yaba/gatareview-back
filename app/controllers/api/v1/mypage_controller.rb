@@ -105,7 +105,7 @@ module Api
                                  'ROUND(AVG(reviews.rating), 1) as avg_rating'
                                )
                                .group('bookmarks.id', 'lectures.id')
-                               .order('bookmarks.created_at DESC')
+                               .order('bookmarks.created_at DESC, bookmarks.id DESC')
                                .offset((page - 1) * per_page)
                                .limit(per_page)
         
@@ -192,7 +192,7 @@ module Api
                                  'ROUND(AVG(reviews.rating), 1) as avg_rating'
                                )
                                .group('bookmarks.id', 'lectures.id')
-                               .order('bookmarks.created_at DESC')
+                               .order('bookmarks.created_at DESC, bookmarks.id DESC')
                                .limit(10)
         
         bookmarks.map do |bookmark|
