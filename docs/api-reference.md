@@ -77,12 +77,12 @@
 - 認証: 任意
 - 目的: 講義に紐づくレビュー一覧と閲覧権限状態を返す。
 - Response:
-  - `reviews`: レビュー配列。各要素は `id`, `rating`, `content`, `lecture_id`, `textbook`, `attendance`, `grading_type`, `content_difficulty`, `content_quality`, `period_year`, `period_term`, `created_at`, `updated_at`, `thanks_count`, `is_own` のみ。
+  - `reviews`: レビュー配列。各要素は `id`, `rating`, `content`, `lecture_id`, `textbook`, `attendance`, `grading_type`, `content_difficulty`, `content_quality`, `period_year`, `period_term`, `thanks_count`, `is_own` のみ。古い順に並べて返す。
     - `is_own`: Bearer トークンのユーザーが投稿者本人なら `true`。未ログイン、無効なトークン、匿名投稿、他人の投稿は `false`。
   - `access`: `restriction_enabled`, `access_granted`
 - 注意:
   - レビュー閲覧制限が有効で権限がない場合、先頭レビュー以外の本文は先頭 30 文字のみ返る。
-  - 投稿者を特定・名寄せできる値（`user`, `user_id`, Google の表示名・プロフィール画像 URL）は返さない。画面に投稿者を表示しておらず、利用者は匿名で投稿している前提のため。項目を増やすときは `ReviewsController::PUBLIC_REVIEW_ATTRIBUTES` を明示的に変更する。
+  - 投稿者を特定・名寄せできる値（`user`, `user_id`, Google の表示名・プロフィール画像 URL）は返さない。`created_at` / `updated_at` も返さない（匿名レビューは編集できないため、編集時刻からログイン投稿かどうかや同じ人の投稿が推測できてしまう）。画面に投稿者を表示しておらず、利用者は匿名で投稿している前提のため。項目を増やすときは `ReviewsController::PUBLIC_REVIEW_ATTRIBUTES` を明示的に変更する。
 
 ### `POST /lectures/:lecture_id/reviews`
 - 認証: 任意
@@ -124,7 +124,7 @@
 - 認証: 不要（トークンを送っても応答は変わらない）
 - 目的: 最新レビューを最大 4 件返す。
 - Response:
-  - 配列。各要素は `id`, `rating`, `created_at`, `content`, `lecture`（`id`, `title`, `lecturer`, `faculty`）のみ。投稿者情報（`user`, `user_id`）は返さない。
+  - 配列（新しい順）。各要素は `id`, `rating`, `content`, `lecture`（`id`, `title`, `lecturer`, `faculty`）のみ。投稿者情報（`user`, `user_id`）と投稿時刻は返さない。
 
 ## ブックマーク
 

@@ -5,9 +5,12 @@ module Api
     class ReviewsController < ApplicationController
       include Authenticatable
 
+      # created_at / updated_at も返さない。匿名レビューは編集できないため、updated_at が
+      # created_at より新しければログイン投稿だと分かり、編集・投稿時刻で同じ人のレビューを
+      # 名寄せできてしまう。並び順はサーバー側で決めて配列の順で返す。
       PUBLIC_REVIEW_ATTRIBUTES = %i[
         id rating content lecture_id textbook attendance grading_type content_difficulty content_quality
-        period_year period_term created_at updated_at
+        period_year period_term
       ].freeze
 
       skip_before_action :authenticate_request, only: %i[index create total latest]
@@ -105,7 +108,7 @@ module Api
         @reviews = Review.includes(:lecture).order(created_at: :desc).limit(4)
         if @reviews.any?
           reviews_json = @reviews.map do |review|
-            review_data = review.as_json(only: %i[id rating created_at])
+            review_data = review.as_json(only: %i[id rating])
             # ルートの最新レビューはログイン有無に関わらず全文を返す
             review_data['content'] = review.content
             review_data['lecture'] = review.lecture.as_json(only: %i[id title lecturer faculty])

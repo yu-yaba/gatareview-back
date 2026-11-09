@@ -7,7 +7,7 @@ require 'rails_helper'
 RSpec.describe 'Reviewer identity privacy', type: :request do
   public_review_keys = %w[
     id rating content lecture_id textbook attendance grading_type content_difficulty content_quality
-    period_year period_term created_at updated_at thanks_count is_own
+    period_year period_term thanks_count is_own
   ].freeze
 
   let!(:owner) do
@@ -36,6 +36,9 @@ RSpec.describe 'Reviewer identity privacy', type: :request do
     identity_markers.each { |marker| expect(response.body).not_to include(marker) }
     expect(response.body).not_to include('avatar_url')
     expect(response.body).not_to include('user_id')
+    # 匿名レビューは編集できないため、時刻からログイン投稿かどうかや同一人物の投稿を推測させない
+    expect(response.body).not_to include('created_at')
+    expect(response.body).not_to include('updated_at')
   end
 
   describe 'GET /api/v1/lectures/:lecture_id/reviews' do
@@ -76,6 +79,17 @@ RSpec.describe 'Reviewer identity privacy', type: :request do
           )
         end
 
+        it '本人が編集したレビューと匿名レビューを応答から見分けられない' do
+          owner_review.update!(content: '編集後の本文です。編集の有無が公開応答から分からないことを確認します。', updated_at: 1.minute.from_now)
+
+          get "/api/v1/lectures/#{lecture.id}/reviews"
+
+          expect(response).to have_http_status(:ok)
+          expect_no_identity_in_body
+          reviews = response.parsed_body.fetch('reviews').index_by { |review| review['id'] }
+          expect(reviews.fetch(owner_review.id).keys).to match_array(reviews.fetch(anonymous_review.id).keys)
+        end
+
         it '無効なトークンは未ログイン扱いで is_own はすべて false' do
           get "/api/v1/lectures/#{lecture.id}/reviews", headers: { 'Authorization' => 'Bearer invalid-token' }
 
@@ -101,7 +115,7 @@ RSpec.describe 'Reviewer identity privacy', type: :request do
             reviews = response.parsed_body
             expect(reviews.pluck('id')).to eq([anonymous_review.id, other_review.id, owner_review.id])
             reviews.each do |review|
-              expect(review.keys).to match_array(%w[id rating created_at content lecture])
+              expect(review.keys).to match_array(%w[id rating content lecture])
               expect(review.fetch('lecture').keys).to match_array(%w[id title lecturer faculty])
             end
           end
