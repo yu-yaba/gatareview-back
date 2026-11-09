@@ -14,9 +14,16 @@ module Api
       ].freeze
       MAX_SEARCH_PARAMETER_LENGTH = 255
       MAX_PAGE = 10_000
-      REVIEW_FILTER_PARAMETERS = %i[
-        period_year period_term textbook attendance grading_type content_difficulty content_quality
-      ].freeze
+      # レビュー詳細条件ごとのSQL断片。値は必ずプレースホルダで渡す。
+      REVIEW_FILTER_CONDITIONS = {
+        period_year: 'reviews.period_year = ?',
+        period_term: 'reviews.period_term = ?',
+        textbook: 'reviews.textbook = ?',
+        attendance: 'reviews.attendance = ?',
+        grading_type: 'reviews.grading_type = ?',
+        content_difficulty: 'reviews.content_difficulty = ?',
+        content_quality: 'reviews.content_quality = ?'
+      }.freeze
       # CSV一括取り込みでは作成日時が同じ授業が大量にあり、評価・件数も同じ値が多い。
       # 同じ値の授業の順序がページ（OFFSET）ごとに変わると重複・欠けが起きるため、
       # どの並び順も最後に一意な lectures.id で順序を確定させる。
@@ -43,11 +50,11 @@ module Api
         lectures = lectures.where(faculty: params[:faculty]) if params[:faculty].present?
 
         # レビュー詳細項目による絞り込み（表示する授業だけを決め、並び順の集計には影響させない）
-        review_conditions = review_detail_conditions
-        lectures = lectures.where(id: Review.where(review_conditions).select(:lecture_id)) if review_conditions.present?
+        reviews = matching_reviews
+        lectures = lectures.where(id: reviews.select(:lecture_id)) unless reviews.nil?
 
         # 件数だけをDB内で集計し、授業ごとの集計結果を転送しない。
-        total_count = count_lectures(lectures, sort, review_filtered: review_conditions.present?)
+        total_count = count_lectures(lectures, sort, review_filtered: !reviews.nil?)
 
         # ページネーション（limit/offsetを使用）
         offset = (page - 1) * per_page
@@ -168,8 +175,12 @@ module Api
       # 詳細条件は「条件に合うレビューが1件以上ある授業か」だけを決める（サブクエリで絞り込む）。
       # 並び順の集計（平均評価・件数・最新投稿日時）は、一覧に表示する値と同じく全レビューを対象にする。
       # JOINした reviews 自体を絞ると、並び順だけが条件に合うレビューの集計になり、表示とずれる。
-      def review_detail_conditions
-        REVIEW_FILTER_PARAMETERS.index_with { |name| params[name] }.compact_blank
+      # 詳細条件が1つもなければ nil を返す。
+      def matching_reviews
+        filters = REVIEW_FILTER_CONDITIONS.select { |name, _sql| params[name].present? }
+        return if filters.empty?
+
+        filters.reduce(Review.all) { |scope, (name, sql)| scope.where(sql, params[name]) }
       end
     end
   end
