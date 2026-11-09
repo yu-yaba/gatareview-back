@@ -221,7 +221,7 @@ RSpec.describe Api::V1::LecturesController, type: :request do
         response.parsed_body.fetch('lectures').pluck('id')
       end
 
-      ['演習', ' 演習', '演習 ', "演習\u3000", "\u3000演習\u3000", "\t演習\n"].each do |search|
+      ['演習', ' 演習', '演習 ', "演習\u3000", "\u3000演習\u3000", "\t演習\n", "\uFEFF演習\u200B"].each do |search|
         it "#{search.inspect}でも空白なしと同じ結果になること" do
           expect(searched_ids(search)).to eq([exercise.id])
         end

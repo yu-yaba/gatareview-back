@@ -23,12 +23,13 @@ class Lecture < ApplicationRecord
     end
   }
 
-  # 前後の空白（全角スペース・タブ・改行を含む）だけを除く。
+  # 前後の空白（全角スペース・タブ・改行を含む）と、コピー＆ペーストで紛れ込みやすい
+  # ゼロ幅スペース（U+200B）・BOM（U+FEFF）だけを除く。
   # 途中の空白はそのまま残す。既存データには「伊藤  守」のように空白が2つ続く担当教員名があり、
   # まとめるとその名前をそのまま貼り付けた検索で見つからなくなるため。
   # なお照合順序 utf8mb4_0900_ai_ci では全角・半角スペースは同じ文字として比較される。
   def self.normalize_search_keyword(query)
-    query.to_s.gsub(/\A[[:space:]]+|[[:space:]]+\z/, '')
+    query.to_s.gsub(/\A[[:space:]\u200B\uFEFF]+|[[:space:]\u200B\uFEFF]+\z/, '')
   end
 
   def self.as_json_reviews(lectures)
