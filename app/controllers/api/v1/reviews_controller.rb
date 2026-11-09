@@ -99,7 +99,9 @@ module Api
         
         # ありがとうの追加・取り消しと同じくレビューの行をロックしてから消す。
         # 処理中のありがとうを待ってから関連ごと消すので、外部キー違反で失敗しない。
-        if Review.transaction { @review.lock!.destroy }
+        # 同じ利用者の別のありがとうと重なるとデッドロックし得るので1回やり直す。
+        # 失敗した試行の状態を持ち越さないよう、試行ごとにロックして読み直したレコードを消す。
+        if DeadlockRetry.call { Review.transaction { Review.lock.find(@review.id).destroy } }
           render json: { success: true, message: 'レビューを削除しました' }
         else
           render json: { success: false, message: 'レビューの削除に失敗しました' }, status: :unprocessable_entity

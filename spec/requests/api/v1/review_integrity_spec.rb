@@ -127,6 +127,29 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
     end
   end
 
+  describe 'DELETE /api/v1/reviews/:id' do
+    it 'デッドロックで巻き戻された削除を1回だけやり直し、件数を二重に減らさないこと' do
+      review = create(:review, lecture: lecture, user: user)
+      2.times { Thank.create!(user: create(:user), review: review) }
+      attempts = 0
+      allow_any_instance_of(Review).to receive(:destroy).and_wrap_original do |original, *args|
+        attempts += 1
+        result = original.call(*args)
+        raise ActiveRecord::Deadlocked, 'Deadlock found when trying to get lock' if attempts == 1
+
+        result
+      end
+
+      delete "/api/v1/reviews/#{review.id}", headers: headers
+
+      expect(response).to have_http_status(:ok)
+      expect(attempts).to eq(2)
+      expect(Review.exists?(review.id)).to be(false)
+      expect(Thank.where(review_id: review.id).count).to eq(0)
+      expect(user.reload.reviews_count).to eq(0)
+    end
+  end
+
   describe 'POST /api/v1/lectures/:lecture_id/bookmarks' do
     it '登録済みなら日本語の文言で422にすること' do
       Bookmark.create!(user: user, lecture: lecture)
