@@ -51,7 +51,7 @@ module Api
         end
 
         def render_invalid_value
-          render json: { errors: ['lecture_review_restriction_enabled は true または false を指定してください'] },
+          render json: { errors: ['レビュー閲覧制限は true または false で指定してください'] },
                  status: :unprocessable_entity
         end
       end

@@ -9,7 +9,7 @@ module Api
       def create
         @thank = @review.thanks.build(user: current_user)
         
-        if @thank.save
+        if save_thank
           render json: { 
             success: true, 
             message: 'ありがとうを送信しました',
@@ -51,6 +51,15 @@ module Api
       end
 
       private
+
+      # 連打などで同時に届いた2件目は、DB の一意インデックスで止まる。検証と同じ文言で 422 を返す。
+      # 別の利用者が同じレビューへ同時にありがとうすると thanks_count の更新でデッドロックし得るので1回やり直す。
+      def save_thank
+        DeadlockRetry.call { @thank.save }
+      rescue ActiveRecord::RecordNotUnique
+        @thank.errors.add(:base, :already_thanked)
+        false
+      end
 
       def set_review
         @review = Review.find(params[:review_id])

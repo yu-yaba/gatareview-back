@@ -42,7 +42,7 @@ module Api
         # ユーザーのレビュー一覧をページネーション付きで取得
         reviews = current_user.reviews
                              .includes(:lecture)
-                             .order(created_at: :desc)
+                             .order(created_at: :desc, id: :desc)
                              .offset((page - 1) * per_page)
                              .limit(per_page)
         
@@ -164,7 +164,7 @@ module Api
         # 最新のレビュー
         latest_review = current_user.reviews
                                    .includes(:lecture)
-                                   .order(created_at: :desc)
+                                   .order(created_at: :desc, id: :desc)
                                    .first
 
         {
@@ -212,7 +212,7 @@ module Api
       def fetch_user_reviews
         current_user.reviews
                    .includes(:lecture)
-                   .order(created_at: :desc)
+                   .order(created_at: :desc, id: :desc)
                    .limit(10)
                    .map do |review|
           {

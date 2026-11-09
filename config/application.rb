@@ -22,6 +22,9 @@ module App
     # in config/environments, which are processed later.
     #
     # config.time_zone = "Central Time (US & Canada)"
+
+    # 検証エラーなど利用者に返す文言は日本語（config/locales/ja.yml）
+    config.i18n.default_locale = :ja
     # config.eager_load_paths << Rails.root.join("extras")
 
     # Only loads a smaller set of middleware suitable for API only apps.

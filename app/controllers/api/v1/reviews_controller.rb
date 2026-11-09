@@ -25,21 +25,21 @@ module Api
           return
         end
 
-        @review = @lecture.reviews.new(review_attributes)
-        @review.user = current_user if current_user
-        
-        if @review.save
-          render json: {
-            success: true,
-            review: public_review_json(@review)
-          }, status: :created
-        else
+        result = ReviewSubmission.new(lecture: @lecture, user: current_user, attributes: review_attributes).call
+        @review = result.review
+
+        if result.status == :invalid
           render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
+        else
+          # 再送（同じ内容の投稿のやり直し）は新しく作らずに既存のレビューを返す
+          render json: { success: true, review: public_review_json(@review) },
+                 status: result.status == :created ? :created : :ok
         end
       end
 
       def index
-        reviews = @lecture.reviews.order(created_at: :asc)
+        # 同じ投稿時刻のレビューがあっても先頭（全文表示する1件）が変わらないよう id でも並べる
+        reviews = @lecture.reviews.order(created_at: :asc, id: :asc)
         access = review_access_state
 
         reviews_json = reviews.each_with_index.map do |review, index|
@@ -78,7 +78,7 @@ module Api
         
         review_attributes = review_params
 
-        if @review.update(review_attributes)
+        if DeadlockRetry.call { @review.update(review_attributes) }
           render json: {
             success: true,
             review: public_review_json(@review)
@@ -105,7 +105,7 @@ module Api
       end
 
       def latest
-        @reviews = Review.includes(:lecture).order(created_at: :desc).limit(4)
+        @reviews = Review.includes(:lecture).order(created_at: :desc, id: :desc).limit(4)
         if @reviews.any?
           reviews_json = @reviews.map do |review|
             review_data = review.as_json(only: %i[id rating])
