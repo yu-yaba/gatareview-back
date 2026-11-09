@@ -98,7 +98,7 @@ heroku run bin/rails db:migrate -a gatareview-back
 
 - Herokuでは `DYNO` がある場合だけ、ルーターが `X-Forwarded-For` の右端に追加したIPを制限のキーに使う。利用者が送れる `Forwarded` や `Client-IP` はキーに使わない。
 - Heroku以外では接続元の `REMOTE_ADDR` を使う。別のプロキシへ移す際は、そのプロキシが保証するヘッダーと信頼境界を確認してから変更する。
-- 授業詳細・検索・Googleログインのように、フロントのサーバー（Vercel）から呼ばれるAPIは、Herokuからは全員がVercelの送信元IPに見える。そのためフロントは、Vercelのエッジが上書きする `x-real-ip` の利用者IPを `X-Gatareview-Client-Ip` に入れ、`RATE_LIMIT_FORWARDING_SECRET` によるHMAC-SHA256署名（`X-Gatareview-Client-Ip-Signature`）と発行時刻（`X-Gatareview-Client-Ip-Timestamp`）を付けて送る。
+- 授業詳細・検索・Googleログインのように、フロントのサーバー（Vercel）から呼ばれるAPIは、Herokuからは全員がVercelの送信元IPに見える。そのためフロントは、利用者IP（Cloudflare経由ではゾーンのTransform Ruleが付ける秘密のヘッダーがある時だけ `CF-Connecting-IP`、それ以外はVercelのエッジが上書きする `x-real-ip`。詳細はフロントの `docs/public-lecture-cache.md`）を `X-Gatareview-Client-Ip` に入れ、`RATE_LIMIT_FORWARDING_SECRET` によるHMAC-SHA256署名（`X-Gatareview-Client-Ip-Signature`）と発行時刻（`X-Gatareview-Client-Ip-Timestamp`）を付けて送る。
   - backendは署名が正しく、発行から60秒以内（未来側は10秒まで）の場合だけそのIPを使う。署名は方式の版・時刻・HTTPメソッド・パス（クエリを除き、Rack::Attackと同じ正規化をしたもの）・IPに対して計算し、定数時間で比較する。ヘッダーがない、署名が違う、期限切れ、IPとして不正な値の場合は、従来どおりルーターが見たIPを使う。署名のないヘッダーは信用しない。
   - IPv6はアドレス単位ではなく `/64` 単位で数える。同じ `/64` 内でアドレスを変えても別の枠にならない。
   - 同じ署名を60秒以内に使い回しても、数えられるのは署名されたIPの枠で、新しい枠は増えない。
@@ -110,10 +110,10 @@ heroku run bin/rails db:migrate -a gatareview-back
 
 ### 署名鍵の設定とデプロイ順
 
-1. `openssl rand -hex 32` などで鍵を作る（実値をリポジトリ・チャット・ログに残さない）。
-2. backendを先にデプロイする。鍵がなくても従来どおり動く。
-3. Herokuに `RATE_LIMIT_FORWARDING_SECRET` を設定する（設定変更でdynoが再起動する）。起動時に鍵が32バイト未満だと警告をログに出し、署名を無視する。
-4. Vercelの本番（必要ならPreview）環境変数に同じ値の `RATE_LIMIT_FORWARDING_SECRET` を設定し、フロントを再デプロイする。フロントは鍵がない、またはVercel外（`VERCEL=1` がない、`VERCEL_ENV=development`）では署名ヘッダーを付けない。
+1. **フロントの対応版を先にデプロイする**（鍵はまだ設定しない）。旧フロントは429を「ページが見つかりません」として表示するため、カウンターが正確になる（ワーカーごとの上限になる）このbackendより先に出す。
+2. backendをデプロイする。鍵がなくても従来どおり動く。
+3. `openssl rand -hex 32` などで鍵を作り（実値をリポジトリ・チャット・ログに残さない）、Herokuに `RATE_LIMIT_FORWARDING_SECRET` を設定する（設定変更でdynoが再起動する）。起動時に鍵が32バイト未満だと警告をログに出し、署名を無視する。
+4. Vercelの本番環境変数に同じ値の `RATE_LIMIT_FORWARDING_SECRET` を設定する。Cloudflare経由の利用者IPを使うための `CLOUDFLARE_PROXY_SECRET` とTransform Ruleの設定はフロントの `docs/deploy-checklist.md` に従う。その後フロントを再デプロイする。フロントは鍵がない、またはVercel外（`VERCEL=1` がない、`VERCEL_ENV=development`）では署名ヘッダーを付けない。
 5. 鍵を変更するときは両方を同じ値に更新する。片方だけ変わっている間は署名が無視され、従来どおりの制限（Vercel経由の要求は1つの枠を共有）に戻るだけで、要求は失敗しない。
 
 ## シラバス取得とイメージへの同梱
