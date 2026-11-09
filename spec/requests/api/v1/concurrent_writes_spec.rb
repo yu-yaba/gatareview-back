@@ -66,8 +66,8 @@ RSpec.describe '同時に届いた書き込み', type: :request do
   end
 
   it 'ブックマークの連打は1件だけ作り、残りは500ではなく422にすること' do
-    statuses = concurrent_posts("/api/v1/lectures/#{lecture.id}/bookmarks", bodies: Array.new(concurrency) { {} },
-                                                                           token: token)
+    statuses = concurrent_posts("/api/v1/lectures/#{lecture.id}/bookmarks",
+                                bodies: Array.new(concurrency) { {} }, token: token)
 
     expect(statuses).to eq(201 => 1, 422 => concurrency - 1)
     expect(Bookmark.where(user: user, lecture: lecture).count).to eq(1)
@@ -76,8 +76,8 @@ RSpec.describe '同時に届いた書き込み', type: :request do
   it 'ありがとうの連打は1件だけ作り、残りは500ではなく422にすること' do
     review = create(:review, lecture: lecture)
 
-    statuses = concurrent_posts("/api/v1/reviews/#{review.id}/thanks", bodies: Array.new(concurrency) { {} },
-                                                                        token: token)
+    statuses = concurrent_posts("/api/v1/reviews/#{review.id}/thanks",
+                                bodies: Array.new(concurrency) { {} }, token: token)
 
     expect(statuses).to eq(201 => 1, 422 => concurrency - 1)
     expect(review.reload.thanks_count).to eq(1)

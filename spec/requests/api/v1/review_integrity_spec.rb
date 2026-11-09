@@ -181,10 +181,10 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
       reviews
     end
 
-    def review_order_sql
+    def review_order_sql(&)
       sql = []
       callback = ->(*, payload) { sql << payload[:sql] if payload[:sql].match?(/FROM `reviews`.*ORDER BY/) }
-      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { yield }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record', &)
       sql
     end
 

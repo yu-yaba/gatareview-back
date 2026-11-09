@@ -22,13 +22,10 @@ namespace :reviews do
       puts
       puts "user_id=#{user_id} lecture_id=#{lecture_id} 件数=#{count}"
       Review.where(user_id: user_id, lecture_id: lecture_id).order(:id).each do |review|
-        puts format(
-          '  id=%<id>d created_at=%<created>s updated_at=%<updated>s rating=%<rating>s ' \
-          '本文=%<length>d文字 本文ハッシュ=%<digest>s thanks=%<thanks>d',
-          id: review.id, created: review.created_at&.iso8601, updated: review.updated_at&.iso8601,
-          rating: review.rating, length: review.content.to_s.length,
-          digest: Digest::SHA256.hexdigest(review.content.to_s)[0, 12], thanks: review.thanks_count.to_i
-        )
+        digest = Digest::SHA256.hexdigest(review.content.to_s)[0, 12]
+        puts "  id=#{review.id} created_at=#{review.created_at&.iso8601} updated_at=#{review.updated_at&.iso8601} " \
+             "rating=#{review.rating} 本文=#{review.content.to_s.length}文字 本文ハッシュ=#{digest} " \
+             "thanks=#{review.thanks_count.to_i}"
       end
     end
     exit 1

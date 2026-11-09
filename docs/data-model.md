@@ -74,8 +74,8 @@ JSON 整形:
 - `has_many :thanks`
 
 制約と index:
-- ログインユーザーは `user_id` と `lecture_id` の組み合わせで一意。
-- `user_id` が null の匿名レビューは一意制約対象外。
+- ログインユーザーは `user_id` と `lecture_id` の組み合わせで一意。model の検証に加え、unique index `index_reviews_on_user_id_and_lecture_id` で保証する（追加手順は [review-uniqueness-migration.md](review-uniqueness-migration.md)）。
+- `user_id` が null の匿名レビューは一意制約対象外（MySQL の unique index は NULL を重複扱いしない）。同じ内容の匿名投稿の再送は `ReviewSubmission` が10分以内なら1件にまとめる。
 - `lecture_id` とレビュー詳細項目の複合 index があり、詳細検索に使う。
 
 注意:

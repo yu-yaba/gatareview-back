@@ -46,6 +46,8 @@ CAのローテーション通知を受けたら、Aivenが配布する現在・�
 
 退避した適用済みmigrationは通常の `db:migrate:status` では `NO FILE` と表示されます。この状態で通常の `db:rollback` を実行しないでください。履歴を含む元の実装は退避先に保存しています。本番の `db:schema:dump` は残存する未使用テーブル・列も出力するため、稼働機能だけを持つ `db/schema.rb` にそのまま上書きしません。
 
+レビューの一意インデックス（`20261109000000_add_unique_index_to_reviews_on_user_id_and_lecture_id.rb`）は、本番の重複レビューを確認・整理してから実行する。重複があると migration はデータを変更せずに中断する。手順は [review-uniqueness-migration.md](review-uniqueness-migration.md)。
+
 review access 関連では env 追加と別に migration が必要になる。
 
 ```bash
