@@ -19,21 +19,30 @@ RSpec.describe '同時に届いた書き込み', type: :request do
 
   after { [Thank, Bookmark, Review, Lecture, User].each(&:delete_all) }
 
-  # 全スレッドが揃ってから一斉に送る。例外は 500 として数える。
-  def concurrent_posts(path, bodies:, token: nil)
+  # 全スレッドが揃ってから一斉に送り、[HTTPメソッド, ステータス] ごとの件数を返す。例外はクラス名で数える。
+  # requests: [[HTTPメソッド, パス, 本文, トークン], ...]
+  def concurrent_requests(requests)
     gate = Queue.new
-    threads = bodies.map do |body|
+    threads = requests.map do |method, path, body, request_token|
       Thread.new do
         gate.pop
-        headers = { 'CONTENT_TYPE' => 'application/json' }
-        headers['HTTP_AUTHORIZATION'] = "Bearer #{token}" if token
-        Rack::MockRequest.new(Rails.application).post(path, headers.merge(input: body.to_json)).status
+        env = { 'CONTENT_TYPE' => 'application/json', input: body.to_json }
+        env['HTTP_AUTHORIZATION'] = "Bearer #{request_token}" if request_token
+        [method, Rack::MockRequest.new(Rails.application).request(method, path, env).status]
       rescue StandardError => e
-        "#{e.class}: #{e.message.lines.first}"
+        [method, "#{e.class}: #{e.message.lines.first}"]
       end
     end
-    bodies.size.times { gate << true }
+    requests.size.times { gate << true }
     threads.map(&:value).tally
+  end
+
+  def concurrent_posts(path, bodies:, token: nil)
+    concurrent_requests(bodies.map { |body| ['POST', path, body, token] }).transform_keys(&:last)
+  end
+
+  def token_for(other_user)
+    JsonWebToken.encode(other_user.jwt_payload)
   end
 
   it 'ログイン利用者の同じ内容の同時投稿は1件だけ作り、残りは既存のレビューを返すこと' do
@@ -57,12 +66,12 @@ RSpec.describe '同時に届いた書き込み', type: :request do
     expect(user.reload.reviews_count).to eq(1)
   end
 
-  it '匿名の同じ内容の同時投稿は1件だけ作ること' do
+  it '匿名の同時投稿は500にならずにすべて保存すること（匿名投稿は再送としてまとめない）' do
     statuses = concurrent_posts("/api/v1/lectures/#{lecture.id}/reviews",
                                 bodies: Array.new(concurrency) { { review: review_attributes } })
 
-    expect(statuses).to eq(201 => 1, 200 => concurrency - 1)
-    expect(Review.where(lecture_id: lecture.id).count).to eq(1)
+    expect(statuses).to eq(201 => concurrency)
+    expect(Review.where(lecture_id: lecture.id).count).to eq(concurrency)
   end
 
   it 'ブックマークの連打は1件だけ作り、残りは500ではなく422にすること' do
@@ -81,5 +90,39 @@ RSpec.describe '同時に届いた書き込み', type: :request do
 
     expect(statuses).to eq(201 => 1, 422 => concurrency - 1)
     expect(review.reload.thanks_count).to eq(1)
+  end
+
+  it '別々の利用者が同じレビューへ同時にありがとうしても、500にならず件数がずれないこと' do
+    review = create(:review, lecture: lecture)
+    tokens = Array.new(concurrency) { token_for(create(:user)) }
+
+    3.times do
+      Thank.where(review: review).delete_all
+      Review.where(id: review.id).update_all(thanks_count: 0)
+
+      statuses = concurrent_requests(tokens.map { |other| ['POST', "/api/v1/reviews/#{review.id}/thanks", {}, other] })
+
+      expect(statuses).to eq(['POST', 201] => concurrency)
+      expect(review.reload.thanks_count).to eq(Thank.where(review: review).count).and eq(concurrency)
+    end
+  end
+
+  it 'ありがとうの送信と取り消しが同時に届いても、500にならず件数がずれないこと' do
+    review = create(:review, lecture: lecture)
+    senders = Array.new(concurrency / 2) { create(:user) }
+    cancellers = Array.new(concurrency / 2) { create(:user) }
+
+    3.times do
+      Thank.where(review: review).delete_all
+      cancellers.each { |canceller| Thank.create!(user: canceller, review: review) }
+      Review.reset_counters(review.id, :thanks)
+
+      requests = senders.map { |sender| ['POST', "/api/v1/reviews/#{review.id}/thanks", {}, token_for(sender)] } +
+                 cancellers.map { |canceller| ['DELETE', "/api/v1/reviews/#{review.id}/thanks", {}, token_for(canceller)] }
+      statuses = concurrent_requests(requests)
+
+      expect(statuses).to eq(['POST', 201] => senders.size, ['DELETE', 200] => cancellers.size)
+      expect(review.reload.thanks_count).to eq(Thank.where(review: review).count).and eq(senders.size)
+    end
   end
 end

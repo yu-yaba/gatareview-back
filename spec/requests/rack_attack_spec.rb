@@ -147,18 +147,16 @@ RSpec.describe 'API rate limiting', type: :request do
     ip = '192.0.2.89'
     lecture = create(:lecture)
     (Rack::Attack::API_LIMIT_PER_WORKER - 3).times { rate_limit_client.get('/api/v1/lectures', 'REMOTE_ADDR' => ip) }
-    # 同じ内容の匿名投稿は再送として1件にまとめるため、回ごとに本文を変える
-    params = ->(index) { { review: { rating: 4.5, content: "匿名投稿の正常なレビュー本文です。#{index}" * 3 } } }
+    params = { review: { rating: 4.5, content: '匿名投稿の正常なレビュー本文です。' * 3 } }
 
     3.times do |index|
       post "//api//v1//lectures//#{lecture.id}//reviews?attempt=#{index}",
-           params: params.call(index),
+           params: params,
            headers: { 'REMOTE_ADDR' => ip }, as: :json
       expect(response).to have_http_status(:created)
     end
 
-    post "//api//v1//lectures//#{lecture.id}//reviews", params: params.call(3), headers: { 'REMOTE_ADDR' => ip },
-                                                        as: :json
+    post "//api//v1//lectures//#{lecture.id}//reviews", params: params, headers: { 'REMOTE_ADDR' => ip }, as: :json
 
     expect(response).to have_http_status(:too_many_requests)
     expect(lecture.reviews.count).to eq(3)

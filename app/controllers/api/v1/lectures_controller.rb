@@ -93,7 +93,7 @@ module Api
         if @lecture.save
           render json: @lecture, status: :created
         else
-          render json: @lecture.errors, status: :unprocessable_entity
+          render json: { errors: @lecture.errors.full_messages }, status: :unprocessable_entity
         end
       end
 

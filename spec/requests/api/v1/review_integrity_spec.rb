@@ -63,41 +63,48 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
       expect(attempts).to eq(2)
       expect(user.reload.reviews_count).to eq(1)
     end
+
+    it 'reviews_count の更新がデッドロックしてやり直しても、二重に数えないこと' do
+      calls = 0
+      update_counters = User.method(:update_counters)
+      allow(User).to receive(:update_counters) do |*args, **options|
+        calls += 1
+        raise ActiveRecord::Deadlocked, 'Deadlock found when trying to get lock' if calls == 1
+
+        update_counters.call(*args, **options)
+      end
+
+      expect { post_review }.to change(Review, :count).by(1)
+      expect(response).to have_http_status(:created)
+      expect(calls).to eq(2)
+      expect(user.reload.reviews_count).to eq(1)
+    end
   end
 
-  describe 'POST /api/v1/lectures/:lecture_id/reviews（匿名投稿）' do
-    it '同じ内容の再送は新しく作らず、既存のレビューを返すこと' do
-      post_review(review_attributes, {})
-      expect(response).to have_http_status(:created)
-      first_id = response.parsed_body.dig('review', 'id')
-
-      expect { post_review(review_attributes, {}) }.not_to change(Review, :count)
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body['review']).to include('id' => first_id, 'is_own' => false)
-    end
-
-    it '項目が1つでも違えば別の投稿として保存すること' do
-      post_review(review_attributes, {})
-
-      expect { post_review(review_attributes.merge(content_quality: '普通'), {}) }.to change(Review, :count).by(1)
-      expect(response).to have_http_status(:created)
-    end
-
-    it '再送とみなす時間を過ぎた同じ内容は新しい投稿として保存すること' do
-      post_review(review_attributes, {})
-
-      travel(ReviewSubmission::RETRY_WINDOW + 1.minute) do
-        expect { post_review(review_attributes, {}) }.to change(Review, :count).by(1)
-      end
-      expect(response).to have_http_status(:created)
-    end
-
-    it 'ログイン投稿と同じ内容でも匿名投稿を既存のレビューにまとめないこと' do
+  describe 'POST /api/v1/lectures/:lecture_id/reviews（再送の時間・匿名投稿）' do
+    it '再送とみなす時間を過ぎた同じ内容は、2件目として422にすること' do
       post_review
 
-      expect { post_review(review_attributes, {}) }.to change(Review, :count).by(1)
-      expect(response).to have_http_status(:created)
-      expect(Review.last.user_id).to be_nil
+      travel(ReviewSubmission::RETRY_WINDOW + 1.minute) do
+        expect { post_review }.not_to change(Review, :count)
+      end
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body['errors']).to eq(['この授業にはすでにレビューを投稿しています'])
+    end
+
+    it '公開中のレビューを匿名で送り直しても、匿名投稿かログイン投稿かを見分けられないこと' do
+      post_review
+      logged_in_id = response.parsed_body.dig('review', 'id')
+      post_review(review_attributes.merge(content_quality: '普通'), {})
+      anonymous_id = response.parsed_body.dig('review', 'id')
+
+      results = [review_attributes, review_attributes.merge(content_quality: '普通')].map do |attributes|
+        expect { post_review(attributes, {}) }.to change(Review, :count).by(1)
+        [response.status, response.parsed_body.dig('review', 'id')]
+      end
+
+      expect(results.map(&:first)).to eq([201, 201])
+      expect(results.map(&:last)).not_to include(logged_in_id, anonymous_id)
     end
   end
 
@@ -162,6 +169,24 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
       expect(review.reload.thanks_count).to eq(1)
     end
 
+    it 'thanks_count の更新がデッドロックしてやり直しても、二重に数えないこと' do
+      calls = 0
+      update_counters = Review.method(:update_counters)
+      allow(Review).to receive(:update_counters) do |*args, **options|
+        calls += 1
+        raise ActiveRecord::Deadlocked, 'Deadlock found when trying to get lock' if calls == 1
+
+        update_counters.call(*args, **options)
+      end
+
+      post "/api/v1/reviews/#{review.id}/thanks", headers: headers
+
+      expect(response).to have_http_status(:created)
+      expect(calls).to eq(2)
+      expect(response.parsed_body['thanks_count']).to eq(1)
+      expect(review.reload.thanks_count).to eq(Thank.where(review: review).count).and eq(1)
+    end
+
     it '自分のレビューへのありがとうは日本語の文言で422にすること' do
       own_review = create(:review, lecture: lecture, user: user)
 
@@ -169,6 +194,41 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body['errors']).to eq(['自分のレビューにはありがとうできません'])
+    end
+  end
+
+  describe '例外から作るエラー応答' do
+    it '削除済みのレビューの編集・削除は、日本語の文言で404にすること' do
+      review = create(:review, lecture: lecture, user: user)
+      review_id = review.id
+      review.destroy!
+
+      patch "/api/v1/reviews/#{review_id}", params: { review: { rating: 2 } }, headers: headers, as: :json
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq('error' => 'レビューが見つかりません')
+
+      delete "/api/v1/reviews/#{review_id}", headers: headers
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq('error' => 'レビューが見つかりません')
+    end
+
+    it '存在しない授業へのレビュー投稿・一覧は、日本語の文言で404にすること' do
+      post "/api/v1/lectures/#{Lecture.maximum(:id).to_i + 1}/reviews", params: { review: review_attributes }, as: :json
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq('error' => '授業が見つかりません')
+
+      get "/api/v1/lectures/#{Lecture.maximum(:id).to_i + 1}/reviews"
+      expect(response.parsed_body).to eq('error' => '授業が見つかりません')
+    end
+
+    it 'review がない・壊れた JSON の投稿は、日本語の文言で400にすること' do
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: { comment: 'review キーなし' }, as: :json
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('error' => 'リクエストの形式が正しくありません')
+
+      post "/api/v1/lectures/#{lecture.id}/reviews", params: '{"review":', headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('error' => 'リクエストの形式が正しくありません')
     end
   end
 

@@ -26,7 +26,7 @@ module Api
       def destroy
         @thank = @review.thanks.find_by(user: current_user)
         
-        if @thank&.destroy
+        if @thank && with_locked_review { @thank.destroy }
           render json: { 
             success: true, 
             message: 'ありがとうを取り消しました',
@@ -53,12 +53,24 @@ module Api
       private
 
       # 連打などで同時に届いた2件目は、DB の一意インデックスで止まる。検証と同じ文言で 422 を返す。
-      # 別の利用者が同じレビューへ同時にありがとうすると thanks_count の更新でデッドロックし得るので1回やり直す。
       def save_thank
-        DeadlockRetry.call { @thank.save }
+        with_locked_review { @thank.save }
       rescue ActiveRecord::RecordNotUnique
         @thank.errors.add(:base, :already_thanked)
         false
+      end
+
+      # 同じレビューへのありがとうの追加・取り消しは、レビューの行をロックしてから行う。
+      # 別々の利用者の thanks_count の更新どうしがデッドロックしないよう1件ずつ処理する。
+      # ロックするときに件数を読み直すので、まれにデッドロックでやり直しても二重に数えない。
+      def with_locked_review
+        DeadlockRetry.call do
+          Thank.transaction do
+            # 失敗した試行で上がったままの件数を捨て、ロックしてから DB の値を読み直す
+            @review.reload(lock: true)
+            yield
+          end
+        end
       end
 
       def set_review
