@@ -10,6 +10,8 @@ Rails.application.routes.draw do
 
       get '/lectures/popular', to: 'lectures#popular'
       get '/lectures/no_reviews', to: 'lectures#no_reviews'
+      # resources :lectures の show（/lectures/:id）より前に置く
+      get '/lectures/sitemap', to: 'lectures#sitemap'
       resources :lectures do
         resources :reviews, only: %i[index create]
         # カスタムブックマークルート

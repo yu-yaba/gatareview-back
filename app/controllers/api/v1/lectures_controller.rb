@@ -4,7 +4,8 @@ module Api
   module V1
     class LecturesController < ApplicationController
       include Authenticatable
-      skip_before_action :authenticate_request, only: %i[index show popular no_reviews]
+      skip_before_action :authenticate_request, only: %i[index show popular no_reviews sitemap]
+      skip_before_action :prevent_api_response_caching, only: [:sitemap]
       before_action :require_admin_privileges, only: [:create]
       before_action :validate_search_parameters, only: [:index]
 
@@ -37,6 +38,8 @@ module Api
         'newest' => 'MAX(reviews.created_at) DESC, lectures.created_at DESC, lectures.id DESC'
       }.freeze
       REVIEWED_ONLY_SORTS = %w[highestRating mostReviewed].freeze
+      SITEMAP_TIME_ZONE = 'Asia/Tokyo'
+      SITEMAP_CACHE_DURATION = 1.hour
 
       def index
         page = @requested_page
@@ -121,6 +124,23 @@ module Api
                                             .limit(limit)
 
         render json: { lectures: Lecture.as_json_reviews(@lectures) }
+      end
+
+      # サイトマップ用。レビューが1件以上ある授業のIDと、最新レビューの投稿日（日本時間の日付）だけを返す。
+      # 投稿日時の時刻と updated_at は返さない。匿名レビューは編集できないため、編集時刻が分かると
+      # ログイン投稿かどうかや同じ人の投稿を推測できてしまう（公開レビューAPIで時刻を返さないのと同じ理由）。
+      def sitemap
+        latest_review_times = Lecture.joins(:reviews)
+                                     .group('lectures.id')
+                                     .order('lectures.id')
+                                     .pluck('lectures.id', Arel.sql('MAX(reviews.created_at)'))
+
+        lectures = latest_review_times.map do |id, latest_review_created_at|
+          { id: id, lastmod: latest_review_created_at.in_time_zone(SITEMAP_TIME_ZONE).to_date.iso8601 }
+        end
+
+        expires_in SITEMAP_CACHE_DURATION, public: true
+        render json: { lectures: lectures }
       end
 
       private

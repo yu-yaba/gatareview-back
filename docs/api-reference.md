@@ -71,6 +71,15 @@
 - 認証: 不要
 - 目的: レビューがない講義を最大 4 件ランダムな offset で返す。
 
+### `GET /lectures/sitemap`
+- 認証: 不要
+- 目的: フロントの `sitemap.xml` 用に、レビューが 1 件以上ある講義の一覧を 1 回で返す（一覧 API をページ送りしない）。
+- Response:
+  - `lectures`: `id` の昇順。各要素は `id` と `lastmod`（その講義の最新レビューの投稿日。日本時間の `YYYY-MM-DD`）のみ。
+- 注意:
+  - `Cache-Control: max-age=3600, public` を返す（公開情報のみのため）。
+  - 時刻やレビューの `updated_at` は返さない。匿名レビューは編集できないため、編集時刻からログイン投稿かどうかや同じ人の投稿が推測できてしまう。レビューの編集では `lastmod` は変わらない。
+
 ## レビュー
 
 ### `GET /lectures/:lecture_id/reviews`

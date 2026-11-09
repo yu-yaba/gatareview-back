@@ -342,6 +342,87 @@ RSpec.describe Api::V1::LecturesController, type: :request do
     end
   end
 
+  describe 'GET /api/v1/lectures/sitemap' do
+    it 'レビューがある授業だけを、ID順に最新レビューの投稿日（日本時間）つきで返すこと' do
+      unreviewed = FactoryBot.create(:lecture)
+      second = FactoryBot.create(:lecture)
+      first = FactoryBot.create(:lecture)
+      FactoryBot.create(:review, lecture: first, created_at: Time.utc(2026, 4, 1, 3, 0))
+      # 日本時間では翌日（2026-05-02 00:30 JST）になる時刻
+      FactoryBot.create(:review, lecture: first, created_at: Time.utc(2026, 5, 1, 15, 30))
+      FactoryBot.create(:review, lecture: second, created_at: Time.utc(2025, 12, 31, 14, 59))
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq(
+        'lectures' => [
+          { 'id' => second.id, 'lastmod' => '2025-12-31' },
+          { 'id' => first.id, 'lastmod' => '2026-05-02' }
+        ]
+      )
+      expect(response.parsed_body.fetch('lectures').pluck('id')).not_to include(unreviewed.id)
+    end
+
+    it 'レビューの編集時刻（updated_at）では lastmod が変わらないこと' do
+      lecture = FactoryBot.create(:lecture)
+      review = FactoryBot.create(:review, lecture: lecture, created_at: Time.utc(2026, 4, 1, 3, 0))
+      review.update_columns(updated_at: Time.utc(2026, 10, 1, 3, 0))
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response.parsed_body.fetch('lectures')).to eq([{ 'id' => lecture.id, 'lastmod' => '2026-04-01' }])
+    end
+
+    it '投稿日時の時刻・授業名・件数などの他の値を返さないこと' do
+      FactoryBot.create(:review)
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response.parsed_body.keys).to eq(['lectures'])
+      expect(response.parsed_body.fetch('lectures').first.keys).to eq(%w[id lastmod])
+      expect(response.parsed_body.fetch('lectures').first.fetch('lastmod')).to match(/\A\d{4}-\d{2}-\d{2}\z/)
+    end
+
+    it '未ログインで取得でき、公開キャッシュ可能なCache-Controlを返すこと' do
+      FactoryBot.create(:review)
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response).to have_http_status(:ok)
+      cache_control = response.headers['Cache-Control'].split(/,\s*/)
+      expect(cache_control).to include('public', 'max-age=3600')
+      expect(cache_control).not_to include('private', 'no-store')
+    end
+
+    it 'レビューがなければ空配列を返すこと' do
+      FactoryBot.create(:lecture)
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq('lectures' => [])
+    end
+
+    it '授業数によらず1回のSELECTで返すこと' do
+      FactoryBot.create_list(:lecture, 5).each { |lecture| FactoryBot.create_list(:review, 2, lecture: lecture) }
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe('sql.active_record') do |*, payload|
+        next if payload[:cached] || %w[SCHEMA TRANSACTION].include?(payload[:name])
+
+        statements << payload.fetch(:sql) if payload.fetch(:sql).match?(/\ASELECT/i)
+      end
+      begin
+        get '/api/v1/lectures/sitemap'
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(response.parsed_body.fetch('lectures').size).to eq(5)
+      expect(statements.size).to eq(1)
+    end
+  end
+
   describe 'POST /api/v1/lectures' do
     let(:admin_user) { FactoryBot.create(:user, email: 'admin@example.com') }
     let(:valid_params) do
