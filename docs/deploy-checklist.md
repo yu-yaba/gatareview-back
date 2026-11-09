@@ -25,8 +25,10 @@
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |
 | `RECAPTCHA_SECRET_KEY` | Feature-based | 本番レビュー投稿で必要 |
 | `RECAPTCHA_ALLOWED_HOSTNAMES` | Yes | `www.gatareview.com,gatareview.com` のような許可ホスト名一覧 |
-| `AUTH_RATE_LIMIT_PER_MINUTE` | Optional | Google認証APIのIP単位上限。既定値 `10` |
-| `API_RATE_LIMIT_PER_FIVE_MINUTES` | Optional | API全体のIP単位上限。既定値 `300` |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | Optional | Google認証APIのIP単位・dyno単位の上限。既定値 `10`。各Pumaワーカーはこれを `WEB_CONCURRENCY` で割った値（切り上げ）で制限する |
+| `API_RATE_LIMIT_PER_FIVE_MINUTES` | Optional | API全体のIP単位・dyno単位の上限。既定値 `300`。割り方は上と同じ |
+| `RATE_LIMIT_FORWARDING_SECRET` | Recommended | フロントのサーバーが付ける利用者IPの署名鍵。32バイト以上のランダム値で、Vercelの同名の変数と完全に同じ値にする。未設定・短い値では署名を無視し、従来どおりルーターが見たIPで制限する |
+| `WEB_CONCURRENCY` | Optional | Pumaのワーカー数。既定値 `2`。`config/puma.rb` と制限値の割り算の両方がこの値を使う |
 | `FRONTEND_URL` | Recommended | `https://www.gatareview.com` |
 | `ADMIN_EMAILS` | Feature-based | `/admin/review-access` に入るメールアドレス |
 
@@ -96,8 +98,23 @@ heroku run bin/rails db:migrate -a gatareview-back
 
 - Herokuでは `DYNO` がある場合だけ、ルーターが `X-Forwarded-For` の右端に追加したIPを制限のキーに使う。利用者が送れる `Forwarded` や `Client-IP` はキーに使わない。
 - Heroku以外では接続元の `REMOTE_ADDR` を使う。別のプロキシへ移す際は、そのプロキシが保証するヘッダーと信頼境界を確認してから変更する。
-- 現在の本番設定はファイルのキャッシュを使い、同一dyno内のPumaワーカー間でカウンターを共有する。dynoを複数に増やす前に、専用のRedis等へ変更して全dynoで上限を共有する必要がある。再起動時には現在のカウンターが消える。
-- Google認証の制限には `.json` と末尾 `/` の形式も含む。上限値は従来通り、Google認証がIPごとに毎分10件、API全体が5分300件。
+- 授業詳細・検索・Googleログインのように、フロントのサーバー（Vercel）から呼ばれるAPIは、Herokuからは全員がVercelの送信元IPに見える。そのためフロントは、Vercelのエッジが上書きする `x-real-ip` の利用者IPを `X-Gatareview-Client-Ip` に入れ、`RATE_LIMIT_FORWARDING_SECRET` によるHMAC-SHA256署名（`X-Gatareview-Client-Ip-Signature`）と発行時刻（`X-Gatareview-Client-Ip-Timestamp`）を付けて送る。
+  - backendは署名が正しく、発行から60秒以内（未来側は10秒まで）の場合だけそのIPを使う。署名は方式の版・時刻・HTTPメソッド・パス（クエリを除き、Rack::Attackと同じ正規化をしたもの）・IPに対して計算し、定数時間で比較する。ヘッダーがない、署名が違う、期限切れ、IPとして不正な値の場合は、従来どおりルーターが見たIPを使う。署名のないヘッダーは信用しない。
+  - IPv6はアドレス単位ではなく `/64` 単位で数える。同じ `/64` 内でアドレスを変えても別の枠にならない。
+  - 同じ署名を60秒以内に使い回しても、数えられるのは署名されたIPの枠で、新しい枠は増えない。
+- カウンターはPumaの各ワーカープロセスのメモリ（`ActiveSupport::Cache::MemoryStore`、上限32MB）に置く。スレッド間で加算が原子的になり、以前のファイルキャッシュのように同時アクセスで上限の約2倍が通ることはない。Redis等の有料サービスは使わない。
+  - ワーカー間でカウンターは共有しないため、各ワーカーは上限を `WEB_CONCURRENCY`（既定2）で割った値で制限する。既定の2ワーカーでは、Google認証がワーカーごとに毎分5件、API全体が5分150件。1つのIPからの要求がどちらかのワーカーに偏ると、dyno全体では設定値より早く（最小で半分で）制限される。
+  - web dynoを増やすと、dynoごとに独立して数えるため、全体の上限はdyno数倍になる。再起動・デプロイ時には現在のカウンターが消える。
+- Google認証の制限には `.json` と末尾 `/` の形式も含む。設定値は従来通り、Google認証がIPごとに毎分10件、API全体が5分300件（dyno単位）。
+- 制限がかかると `[rack-attack] throttled rule=... key_source=signed|router` をログに出す。IPそのものは出さない。`key_source=router` のまま授業詳細やログインの制限が頻発する場合は、署名鍵の設定漏れや不一致を疑う。
+
+### 署名鍵の設定とデプロイ順
+
+1. `openssl rand -hex 32` などで鍵を作る（実値をリポジトリ・チャット・ログに残さない）。
+2. backendを先にデプロイする。鍵がなくても従来どおり動く。
+3. Herokuに `RATE_LIMIT_FORWARDING_SECRET` を設定する（設定変更でdynoが再起動する）。起動時に鍵が32バイト未満だと警告をログに出し、署名を無視する。
+4. Vercelの本番（必要ならPreview）環境変数に同じ値の `RATE_LIMIT_FORWARDING_SECRET` を設定し、フロントを再デプロイする。フロントは鍵がない、またはVercel外（`VERCEL=1` がない、`VERCEL_ENV=development`）では署名ヘッダーを付けない。
+5. 鍵を変更するときは両方を同じ値に更新する。片方だけ変わっている間は署名が無視され、従来どおりの制限（Vercel経由の要求は1つの枠を共有）に戻るだけで、要求は失敗しない。
 
 ## シラバス取得とイメージへの同梱
 
