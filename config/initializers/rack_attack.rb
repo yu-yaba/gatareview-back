@@ -130,7 +130,9 @@ end
 module RateLimitSettings
   module_function
 
-  STORE_SIZE = 32.megabytes
+  # About 25,000 counters per worker. Kept small because two workers share an
+  # Eco dyno's 512 MB; when full, the least recently used counters are dropped.
+  STORE_SIZE = 8.megabytes
 
   def cache_store(env = Rails.env)
     # Request specs that exercise the limits install their own MemoryStore.
