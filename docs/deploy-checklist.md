@@ -113,7 +113,7 @@ heroku run bin/rails db:migrate -a gatareview-back
 1. **フロントの対応版を先にデプロイする**（鍵はまだ設定しない）。旧フロントは429を「ページが見つかりません」として表示するため、カウンターが正確になる（ワーカーごとの上限になる）このbackendより先に出す。
 2. backendをデプロイする。鍵がなくても従来どおり動く。
 3. `openssl rand -hex 32` などで鍵を作り（実値をリポジトリ・チャット・ログに残さない）、Herokuに `RATE_LIMIT_FORWARDING_SECRET` を設定する（設定変更でdynoが再起動する）。起動時に鍵が32バイト未満だと警告をログに出し、署名を無視する。
-4. Vercelの本番環境変数に同じ値の `RATE_LIMIT_FORWARDING_SECRET` を設定する。Cloudflare経由の利用者IPを使うための `CLOUDFLARE_PROXY_SECRET` とTransform Ruleの設定はフロントの `docs/deploy-checklist.md` に従う。その後フロントを再デプロイする。フロントは鍵がない、またはVercel外（`VERCEL=1` がない、`VERCEL_ENV=development`）では署名ヘッダーを付けない。
+4. Vercelの本番環境変数に同じ値の `RATE_LIMIT_FORWARDING_SECRET` を設定する。Cloudflare経由の利用者IPを使うための `CLOUDFLARE_PROXY_SECRET` とTransform Ruleもフロントの `docs/deploy-checklist.md` に従って**同時に**そろえ、その後でフロントを再デプロイする（片方だけで再デプロイするとCloudflareのIPが署名され、利用者が枠を共有する）。フロントは鍵がない、またはVercel外（`VERCEL=1` がない、`VERCEL_ENV=development`）では署名ヘッダーを付けない。
 5. 鍵を変更するときは両方を同じ値に更新する。片方だけ変わっている間は署名が無視され、従来どおりの制限（Vercel経由の要求は1つの枠を共有）に戻るだけで、要求は失敗しない。
 
 ## シラバス取得とイメージへの同梱
