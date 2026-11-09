@@ -4,8 +4,14 @@ module Api
   module V1
     class ReviewsController < ApplicationController
       include Authenticatable
+
+      PUBLIC_REVIEW_ATTRIBUTES = %i[
+        id rating content lecture_id textbook attendance grading_type content_difficulty content_quality
+        period_year period_term created_at updated_at
+      ].freeze
+
       skip_before_action :authenticate_request, only: %i[index create total latest]
-      before_action :authenticate_optional, only: %i[index latest]
+      before_action :authenticate_optional, only: %i[index]
       before_action :authenticate_optional_for_create, only: [:create]
       before_action :set_lecture, except: %i[total latest update destroy]
 
@@ -20,11 +26,9 @@ module Api
         @review.user = current_user if current_user
         
         if @review.save
-          review_data = @review.as_json(include: { user: { only: %i[id name avatar_url] } })
-          review_data['user_id'] = @review.user_id
           render json: {
             success: true,
-            review: review_data
+            review: public_review_json(@review)
           }, status: :created
         else
           render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
@@ -32,14 +36,11 @@ module Api
       end
 
       def index
-        reviews = @lecture.reviews.includes(:user).order(created_at: :asc)
+        reviews = @lecture.reviews.order(created_at: :asc)
         access = review_access_state
 
         reviews_json = reviews.each_with_index.map do |review, index|
-          review_data = review.as_json
-          review_data['user_id'] = review.user_id
-          review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
-          review_data['thanks_count'] = review.thanks_count || 0
+          review_data = public_review_json(review)
 
           unless access[:access_granted]
             # 権限がない場合でも、最初に投稿されたレビュー（一覧の先頭）は全文表示する
@@ -75,11 +76,9 @@ module Api
         review_attributes = review_params
 
         if @review.update(review_attributes)
-          review_data = @review.as_json(include: { user: { only: %i[id name avatar_url] } })
-          review_data['user_id'] = @review.user_id
-          render json: { 
-            success: true, 
-            review: review_data
+          render json: {
+            success: true,
+            review: public_review_json(@review)
           }
         else
           render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
@@ -103,14 +102,13 @@ module Api
       end
 
       def latest
-        @reviews = Review.includes(:lecture, :user).order(created_at: :desc).limit(4)
+        @reviews = Review.includes(:lecture).order(created_at: :desc).limit(4)
         if @reviews.any?
           reviews_json = @reviews.map do |review|
             review_data = review.as_json(only: %i[id rating created_at])
             # ルートの最新レビューはログイン有無に関わらず全文を返す
             review_data['content'] = review.content
             review_data['lecture'] = review.lecture.as_json(only: %i[id title lecturer faculty])
-            review_data['user'] = review.user ? review.user.as_json(only: %i[id name avatar_url]) : { id: nil, name: '匿名ユーザー', avatar_url: nil }
             review_data
           end
           render json: reviews_json
@@ -121,9 +119,22 @@ module Api
 
       private
 
-
       def set_lecture
         @lecture = Lecture.find(params[:lecture_id])
+      end
+
+      # 画面に投稿者を表示しないため、投稿者を特定・名寄せできる値（user / user_id、
+      # Google の表示名・プロフィール画像）は公開レスポンスに含めない。
+      # 列を追加しても自動で公開されないよう、返す属性は許可リストで固定する。
+      def public_review_json(review)
+        review.as_json(only: PUBLIC_REVIEW_ATTRIBUTES).merge(
+          'thanks_count' => review.thanks_count || 0,
+          'is_own' => own_review?(review)
+        )
+      end
+
+      def own_review?(review)
+        current_user.present? && review.user_id.present? && review.user_id == current_user.id
       end
 
       def review_params

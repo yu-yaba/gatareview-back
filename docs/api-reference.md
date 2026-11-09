@@ -77,10 +77,12 @@
 - 認証: 任意
 - 目的: 講義に紐づくレビュー一覧と閲覧権限状態を返す。
 - Response:
-  - `reviews`: レビュー配列。`user`, `user_id`, `thanks_count` を含む。
+  - `reviews`: レビュー配列。各要素は `id`, `rating`, `content`, `lecture_id`, `textbook`, `attendance`, `grading_type`, `content_difficulty`, `content_quality`, `period_year`, `period_term`, `created_at`, `updated_at`, `thanks_count`, `is_own` のみ。
+    - `is_own`: Bearer トークンのユーザーが投稿者本人なら `true`。未ログイン、無効なトークン、匿名投稿、他人の投稿は `false`。
   - `access`: `restriction_enabled`, `access_granted`
 - 注意:
   - レビュー閲覧制限が有効で権限がない場合、先頭レビュー以外の本文は先頭 30 文字のみ返る。
+  - 投稿者を特定・名寄せできる値（`user`, `user_id`, Google の表示名・プロフィール画像 URL）は返さない。画面に投稿者を表示しておらず、利用者は匿名で投稿している前提のため。項目を増やすときは `ReviewsController::PUBLIC_REVIEW_ATTRIBUTES` を明示的に変更する。
 
 ### `POST /lectures/:lecture_id/reviews`
 - 認証: 任意
@@ -96,6 +98,7 @@
   - `review.grading_type`
   - `review.content_difficulty`
   - `review.content_quality`
+- Response: `{ "success": true, "review": { ... } }`。`review` は `GET /lectures/:lecture_id/reviews` の各要素と同じ項目（ログイン投稿なら `is_own: true`、匿名投稿なら `false`）。
 - 注意:
   - production では `RECAPTCHA_SECRET_KEY` が必須。
   - ログインユーザーは同一講義に複数レビューを投稿できない。
@@ -104,6 +107,7 @@
 - 認証: 必須
 - 目的: 自分のレビューを更新する。
 - Body: 作成時と同じ `review` 項目。
+- Response: `{ "success": true, "review": { ... } }`。`review` は一覧の各要素と同じ項目で `is_own: true`。
 - 権限: 投稿者本人のみ。
 
 ### `DELETE /reviews/:id`
@@ -117,10 +121,10 @@
 - Response: `{ "count": number }`
 
 ### `GET /reviews/latest`
-- 認証: 任意
+- 認証: 不要（トークンを送っても応答は変わらない）
 - 目的: 最新レビューを最大 4 件返す。
 - Response:
-  - 配列。各要素に `id`, `rating`, `created_at`, `content`, `lecture`, `user` を含む。
+  - 配列。各要素は `id`, `rating`, `created_at`, `content`, `lecture`（`id`, `title`, `lecturer`, `faculty`）のみ。投稿者情報（`user`, `user_id`）は返さない。
 
 ## ブックマーク
 
