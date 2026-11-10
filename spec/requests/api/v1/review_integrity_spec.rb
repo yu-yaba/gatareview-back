@@ -148,6 +148,30 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
       expect(Thank.where(review_id: review.id).count).to eq(0)
       expect(user.reload.reviews_count).to eq(0)
     end
+
+    # 実際にデッドロックが起きるのは reviews_count の更新なので、その SQL を実行する前に起こす
+    it 'reviews_count の更新でデッドロックしても1回だけやり直し、件数を二重に減らさないこと' do
+      create(:review, user: user)
+      review = create(:review, lecture: lecture, user: user)
+      2.times { Thank.create!(user: create(:user), review: review) }
+      counter_updates = 0
+      connection = ActiveRecord::Base.lease_connection
+      allow(connection).to receive(:exec_update).and_wrap_original do |original, *args, **options|
+        if args.first.to_s.match?(/UPDATE `users` SET .*`reviews_count`/)
+          counter_updates += 1
+          raise ActiveRecord::Deadlocked, 'Deadlock found when trying to get lock' if counter_updates == 1
+        end
+        original.call(*args, **options)
+      end
+
+      delete "/api/v1/reviews/#{review.id}", headers: headers
+
+      expect(response).to have_http_status(:ok)
+      expect(counter_updates).to eq(2)
+      expect(Review.exists?(review.id)).to be(false)
+      expect(Thank.where(review_id: review.id).count).to eq(0)
+      expect(user.reload.reviews_count).to eq(1).and eq(Review.where(user: user).count)
+    end
   end
 
   describe 'POST /api/v1/lectures/:lecture_id/bookmarks' do
