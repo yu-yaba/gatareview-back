@@ -29,8 +29,9 @@ RSpec.describe Lecture, type: :model do
         expect(result.map { |lecture| lecture.values_at(:avg_rating, :review_count) }).to eq(
           [[0, 0], [4.5, 1], [3.5, 2]]
         )
+        # 授業の created_at / updated_at は公開しない
         expect(result.first.keys).to contain_exactly(
-          :id, :title, :lecturer, :faculty, :created_at, :updated_at, :avg_rating, :review_count
+          :id, :title, :lecturer, :faculty, :avg_rating, :review_count
         )
         expect(statements.size).to be <= 2
       end

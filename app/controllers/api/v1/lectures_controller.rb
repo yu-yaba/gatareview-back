@@ -38,7 +38,6 @@ module Api
         'newest' => 'MAX(reviews.created_at) DESC, lectures.created_at DESC, lectures.id DESC'
       }.freeze
       REVIEWED_ONLY_SORTS = %w[highestRating mostReviewed].freeze
-      SITEMAP_TIME_ZONE = 'Asia/Tokyo'
       SITEMAP_CACHE_DURATION = 1.hour
 
       def index
@@ -94,7 +93,7 @@ module Api
         @lecture = Lecture.new(lecture_params)
 
         if @lecture.save
-          render json: @lecture, status: :created
+          render json: @lecture.as_json(only: Lecture::PUBLIC_ATTRIBUTES), status: :created
         else
           render json: { errors: @lecture.errors.full_messages }, status: :unprocessable_entity
         end
@@ -126,21 +125,15 @@ module Api
         render json: { lectures: Lecture.as_json_reviews(@lectures) }
       end
 
-      # サイトマップ用。レビューが1件以上ある授業のIDと、最新レビューの投稿日（日本時間の日付）だけを返す。
-      # 投稿日時の時刻と updated_at は返さない。匿名レビューは編集できないため、編集時刻が分かると
-      # ログイン投稿かどうかや同じ人の投稿を推測できてしまう（公開レビューAPIで時刻を返さないのと同じ理由）。
+      # サイトマップ用。レビューが1件以上ある授業のIDだけを昇順で返す。
+      # 最終更新日（lastmod）など、レビューや授業の作成・更新時刻から作る値は返さない。
+      # 匿名レビューは編集できないため、時刻からログイン投稿かどうかや同じ人の投稿を推測できてしまう
+      # （公開レビューAPIで時刻を返さないのと同じ理由）。粒度を日や月に丸めても返さない。
       def sitemap
-        latest_review_times = Lecture.joins(:reviews)
-                                     .group('lectures.id')
-                                     .order('lectures.id')
-                                     .pluck('lectures.id', Arel.sql('MAX(reviews.created_at)'))
-
-        lectures = latest_review_times.map do |id, latest_review_created_at|
-          { id: id, lastmod: latest_review_created_at.in_time_zone(SITEMAP_TIME_ZONE).to_date.iso8601 }
-        end
+        lecture_ids = Lecture.joins(:reviews).distinct.order('lectures.id').pluck('lectures.id')
 
         expires_in SITEMAP_CACHE_DURATION, public: true
-        render json: { lectures: lectures }
+        render json: { lecture_ids: lecture_ids }
       end
 
       private

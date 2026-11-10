@@ -45,14 +45,15 @@
   - `sort`: `newest`, `highestRating`, `mostReviewed`
   - `period_year`, `period_term`, `textbook`, `attendance`, `grading_type`, `content_difficulty`, `content_quality`
 - Response:
-  - `lectures`: 講義配列。各要素に `avg_rating`, `review_count` を含む。
+  - `lectures`: 講義配列。各要素は `id`, `title`, `lecturer`, `faculty`, `avg_rating`, `review_count` のみ（`popular`・`no_reviews` も同じ）。
+    - 講義の `created_at` / `updated_at` は返さない（講義はレビューと一緒に追加されることがあり、時刻からレビューの投稿時刻が推測できるため）。項目を増やすときは `Lecture::PUBLIC_ATTRIBUTES` を明示的に変更する。
   - `pagination`: `current_page`, `total_pages`, `total_count`, `per_page`
 
 ### `GET /lectures/:id`
 - 認証: 不要
 - 目的: 講義詳細を返す。
 - Response:
-  - 講義基本項目
+  - 講義基本項目（`id`, `title`, `lecturer`, `faculty`。`created_at` / `updated_at` は返さない）
   - `avg_rating`
   - `review_count`
 
@@ -75,12 +76,12 @@
 
 ### `GET /lectures/sitemap`
 - 認証: 不要
-- 目的: フロントの `sitemap.xml` 用に、レビューが 1 件以上ある講義の一覧を 1 回で返す（一覧 API をページ送りしない）。
+- 目的: フロントの `sitemap.xml` 用に、レビューが 1 件以上ある講義の ID を 1 回で返す（一覧 API をページ送りしない）。
 - Response:
-  - `lectures`: `id` の昇順。各要素は `id` と `lastmod`（その講義の最新レビューの投稿日。日本時間の `YYYY-MM-DD`）のみ。
+  - `lecture_ids`: 講義 ID の配列（昇順）。
 - 注意:
   - `Cache-Control: max-age=3600, public` を返す（公開情報のみのため）。
-  - 時刻やレビューの `updated_at` は返さない。匿名レビューは編集できないため、編集時刻からログイン投稿かどうかや同じ人の投稿が推測できてしまう。レビューの編集では `lastmod` は変わらない。
+  - 最終更新日など、レビュー・講義の作成・更新時刻から作る値は返さない（日・月単位に丸めた値も含む）。匿名レビューは編集できないため、時刻からログイン投稿かどうかや同じ人の投稿が推測できてしまう。
 
 ## レビュー
 

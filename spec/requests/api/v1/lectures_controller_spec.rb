@@ -343,45 +343,29 @@ RSpec.describe Api::V1::LecturesController, type: :request do
   end
 
   describe 'GET /api/v1/lectures/sitemap' do
-    it 'レビューがある授業だけを、ID順に最新レビューの投稿日（日本時間）つきで返すこと' do
+    it 'レビューがある授業のIDだけを昇順で返すこと' do
       unreviewed = FactoryBot.create(:lecture)
       second = FactoryBot.create(:lecture)
       first = FactoryBot.create(:lecture)
-      FactoryBot.create(:review, lecture: first, created_at: Time.utc(2026, 4, 1, 3, 0))
-      # 日本時間では翌日（2026-05-02 00:30 JST）になる時刻
-      FactoryBot.create(:review, lecture: first, created_at: Time.utc(2026, 5, 1, 15, 30))
-      FactoryBot.create(:review, lecture: second, created_at: Time.utc(2025, 12, 31, 14, 59))
+      FactoryBot.create_list(:review, 2, lecture: first)
+      FactoryBot.create(:review, lecture: second)
 
       get '/api/v1/lectures/sitemap'
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq(
-        'lectures' => [
-          { 'id' => second.id, 'lastmod' => '2025-12-31' },
-          { 'id' => first.id, 'lastmod' => '2026-05-02' }
-        ]
-      )
-      expect(response.parsed_body.fetch('lectures').pluck('id')).not_to include(unreviewed.id)
+      expect(response.parsed_body).to eq('lecture_ids' => [second.id, first.id].sort)
+      expect(response.parsed_body.fetch('lecture_ids')).not_to include(unreviewed.id)
     end
 
-    it 'レビューの編集時刻（updated_at）では lastmod が変わらないこと' do
-      lecture = FactoryBot.create(:lecture)
+    it 'レビュー・授業の作成・更新時刻から作る値（日付を含む）を返さないこと' do
+      lecture = FactoryBot.create(:lecture, created_at: Time.utc(2025, 4, 1, 3, 0), updated_at: Time.utc(2025, 4, 2, 3, 0))
       review = FactoryBot.create(:review, lecture: lecture, created_at: Time.utc(2026, 4, 1, 3, 0))
       review.update_columns(updated_at: Time.utc(2026, 10, 1, 3, 0))
 
       get '/api/v1/lectures/sitemap'
 
-      expect(response.parsed_body.fetch('lectures')).to eq([{ 'id' => lecture.id, 'lastmod' => '2026-04-01' }])
-    end
-
-    it '投稿日時の時刻・授業名・件数などの他の値を返さないこと' do
-      FactoryBot.create(:review)
-
-      get '/api/v1/lectures/sitemap'
-
-      expect(response.parsed_body.keys).to eq(['lectures'])
-      expect(response.parsed_body.fetch('lectures').first.keys).to eq(%w[id lastmod])
-      expect(response.parsed_body.fetch('lectures').first.fetch('lastmod')).to match(/\A\d{4}-\d{2}-\d{2}\z/)
+      expect(response.parsed_body).to eq('lecture_ids' => [lecture.id])
+      expect(response.body).not_to match(/20\d\d-\d\d|lastmod|created_at|updated_at/)
     end
 
     it '未ログインで取得でき、公開キャッシュ可能なCache-Controlを返すこと' do
@@ -401,7 +385,7 @@ RSpec.describe Api::V1::LecturesController, type: :request do
       get '/api/v1/lectures/sitemap'
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq('lectures' => [])
+      expect(response.parsed_body).to eq('lecture_ids' => [])
     end
 
     it '授業数によらず1回のSELECTで返すこと' do
@@ -418,8 +402,51 @@ RSpec.describe Api::V1::LecturesController, type: :request do
         ActiveSupport::Notifications.unsubscribe(subscriber)
       end
 
-      expect(response.parsed_body.fetch('lectures').size).to eq(5)
+      expect(response.parsed_body.fetch('lecture_ids').size).to eq(5)
       expect(statements.size).to eq(1)
+    end
+  end
+
+  describe '公開APIの授業の項目' do
+    let!(:lecture) do
+      FactoryBot.create(:lecture, created_at: Time.utc(2025, 4, 1, 3, 0), updated_at: Time.utc(2025, 4, 2, 3, 0))
+    end
+    let!(:unreviewed) { FactoryBot.create(:lecture) }
+
+    before { FactoryBot.create(:review, lecture: lecture) }
+
+    def lecture_hashes(body)
+      case body
+      when Array then body.flat_map { |item| lecture_hashes(item) }
+      when Hash
+        own = body.key?('title') && body.key?('lecturer') ? [body] : []
+        own + body.values.flat_map { |value| lecture_hashes(value) }
+      else []
+      end
+    end
+
+    {
+      '一覧' => '/api/v1/lectures',
+      '詳細' => nil,
+      'レビュー数の多い授業' => '/api/v1/lectures/popular',
+      'レビューのない授業' => '/api/v1/lectures/no_reviews',
+      '最新レビュー' => '/api/v1/reviews/latest'
+    }.each do |name, path|
+      it "#{name}は授業の created_at / updated_at を返さないこと" do
+        get(path || "/api/v1/lectures/#{lecture.id}")
+
+        expect(response).to have_http_status(:ok)
+        lectures = lecture_hashes(response.parsed_body)
+        expect(lectures).not_to be_empty
+        lectures.each { |item| expect(item.keys).not_to include('created_at', 'updated_at') }
+        expect(response.body).not_to include('2025-04-01', '2025-04-02')
+      end
+    end
+
+    it '詳細は公開する項目だけを返すこと' do
+      get "/api/v1/lectures/#{lecture.id}"
+
+      expect(response.parsed_body.keys).to contain_exactly('id', 'title', 'lecturer', 'faculty', 'avg_rating', 'review_count')
     end
   end
 
