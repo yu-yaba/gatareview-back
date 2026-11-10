@@ -4,6 +4,11 @@ class Lecture < ApplicationRecord
   # Keep already-added, unused feature columns out of the existing API.
   self.ignored_columns += %w[normalized_key merged_into_lecture_id merged_at]
 
+  # 公開APIで返す授業の項目。created_at / updated_at は返さない。
+  # 授業はレビューと一緒に追加されることがあり、作成・更新時刻からレビューの投稿時刻が推測できるため
+  # （レビューの時刻を公開APIから外したのと同じ理由）。項目を増やすときはここを明示的に変える。
+  PUBLIC_ATTRIBUTES = %i[id title lecturer faculty].freeze
+
   has_many :reviews
   has_many :bookmarks, dependent: :destroy
   
@@ -34,7 +39,7 @@ class Lecture < ApplicationRecord
   end
 
   def self.as_json_reviews(lectures)
-    records = lectures.select(:id, :title, :lecturer, :faculty, :created_at, :updated_at).to_a
+    records = lectures.select(*PUBLIC_ATTRIBUTES).to_a
     return [] if records.empty?
 
     statistics = Review.where(lecture_id: records.map(&:id))
@@ -49,8 +54,6 @@ class Lecture < ApplicationRecord
         title: lecture.title,
         lecturer: lecture.lecturer,
         faculty: lecture.faculty,
-        created_at: lecture.created_at,
-        updated_at: lecture.updated_at,
         avg_rating: (average || 0).round(1),
         review_count: count
       }
@@ -60,8 +63,8 @@ class Lecture < ApplicationRecord
   def as_json_with_reviews
     avg_rating, review_count = reviews.pick(Arel.sql('AVG(rating)'), Arel.sql('COUNT(*)'))
 
-    # as_jsonで基本属性を取得し、追加情報をマージ
-    as_json.merge(
+    # 公開する基本属性だけを取得し、追加情報をマージ
+    as_json(only: PUBLIC_ATTRIBUTES).merge(
       avg_rating: (avg_rating || 0).round(1),
       review_count: review_count
     )

@@ -342,6 +342,114 @@ RSpec.describe Api::V1::LecturesController, type: :request do
     end
   end
 
+  describe 'GET /api/v1/lectures/sitemap' do
+    it 'レビューがある授業のIDだけを昇順で返すこと' do
+      unreviewed = FactoryBot.create(:lecture)
+      second = FactoryBot.create(:lecture)
+      first = FactoryBot.create(:lecture)
+      FactoryBot.create_list(:review, 2, lecture: first)
+      FactoryBot.create(:review, lecture: second)
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq('lecture_ids' => [second.id, first.id].sort)
+      expect(response.parsed_body.fetch('lecture_ids')).not_to include(unreviewed.id)
+    end
+
+    it 'レビュー・授業の作成・更新時刻から作る値（日付を含む）を返さないこと' do
+      lecture = FactoryBot.create(:lecture, created_at: Time.utc(2025, 4, 1, 3, 0), updated_at: Time.utc(2025, 4, 2, 3, 0))
+      review = FactoryBot.create(:review, lecture: lecture, created_at: Time.utc(2026, 4, 1, 3, 0))
+      review.update_columns(updated_at: Time.utc(2026, 10, 1, 3, 0))
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response.parsed_body).to eq('lecture_ids' => [lecture.id])
+      expect(response.body).not_to match(/20\d\d-\d\d|lastmod|created_at|updated_at/)
+    end
+
+    it '未ログインで取得でき、公開キャッシュ可能なCache-Controlを返すこと' do
+      FactoryBot.create(:review)
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response).to have_http_status(:ok)
+      cache_control = response.headers['Cache-Control'].split(/,\s*/)
+      expect(cache_control).to include('public', 'max-age=3600')
+      expect(cache_control).not_to include('private', 'no-store')
+    end
+
+    it 'レビューがなければ空配列を返すこと' do
+      FactoryBot.create(:lecture)
+
+      get '/api/v1/lectures/sitemap'
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq('lecture_ids' => [])
+    end
+
+    it '授業数によらず1回のSELECTで返すこと' do
+      FactoryBot.create_list(:lecture, 5).each { |lecture| FactoryBot.create_list(:review, 2, lecture: lecture) }
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe('sql.active_record') do |*, payload|
+        next if payload[:cached] || %w[SCHEMA TRANSACTION].include?(payload[:name])
+
+        statements << payload.fetch(:sql) if payload.fetch(:sql).match?(/\ASELECT/i)
+      end
+      begin
+        get '/api/v1/lectures/sitemap'
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(response.parsed_body.fetch('lecture_ids').size).to eq(5)
+      expect(statements.size).to eq(1)
+    end
+  end
+
+  describe '公開APIの授業の項目' do
+    let!(:lecture) do
+      FactoryBot.create(:lecture, created_at: Time.utc(2025, 4, 1, 3, 0), updated_at: Time.utc(2025, 4, 2, 3, 0))
+    end
+    let!(:unreviewed) { FactoryBot.create(:lecture) }
+
+    before { FactoryBot.create(:review, lecture: lecture) }
+
+    def lecture_hashes(body)
+      case body
+      when Array then body.flat_map { |item| lecture_hashes(item) }
+      when Hash
+        own = body.key?('title') && body.key?('lecturer') ? [body] : []
+        own + body.values.flat_map { |value| lecture_hashes(value) }
+      else []
+      end
+    end
+
+    {
+      '一覧' => '/api/v1/lectures',
+      '詳細' => nil,
+      'レビュー数の多い授業' => '/api/v1/lectures/popular',
+      'レビューのない授業' => '/api/v1/lectures/no_reviews',
+      '最新レビュー' => '/api/v1/reviews/latest'
+    }.each do |name, path|
+      it "#{name}は授業の created_at / updated_at を返さないこと" do
+        get(path || "/api/v1/lectures/#{lecture.id}")
+
+        expect(response).to have_http_status(:ok)
+        lectures = lecture_hashes(response.parsed_body)
+        expect(lectures).not_to be_empty
+        lectures.each { |item| expect(item.keys).not_to include('created_at', 'updated_at') }
+        expect(response.body).not_to include('2025-04-01', '2025-04-02')
+      end
+    end
+
+    it '詳細は公開する項目だけを返すこと' do
+      get "/api/v1/lectures/#{lecture.id}"
+
+      expect(response.parsed_body.keys).to contain_exactly('id', 'title', 'lecturer', 'faculty', 'avg_rating', 'review_count')
+    end
+  end
+
   describe 'POST /api/v1/lectures' do
     let(:admin_user) { FactoryBot.create(:user, email: 'admin@example.com') }
     let(:valid_params) do

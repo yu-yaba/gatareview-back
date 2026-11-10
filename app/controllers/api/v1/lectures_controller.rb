@@ -4,7 +4,8 @@ module Api
   module V1
     class LecturesController < ApplicationController
       include Authenticatable
-      skip_before_action :authenticate_request, only: %i[index show popular no_reviews]
+      skip_before_action :authenticate_request, only: %i[index show popular no_reviews sitemap]
+      skip_before_action :prevent_api_response_caching, only: [:sitemap]
       before_action :require_admin_privileges, only: [:create]
       before_action :validate_search_parameters, only: [:index]
 
@@ -37,6 +38,7 @@ module Api
         'newest' => 'MAX(reviews.created_at) DESC, lectures.created_at DESC, lectures.id DESC'
       }.freeze
       REVIEWED_ONLY_SORTS = %w[highestRating mostReviewed].freeze
+      SITEMAP_CACHE_DURATION = 1.hour
 
       def index
         page = @requested_page
@@ -91,7 +93,7 @@ module Api
         @lecture = Lecture.new(lecture_params)
 
         if @lecture.save
-          render json: @lecture, status: :created
+          render json: @lecture.as_json(only: Lecture::PUBLIC_ATTRIBUTES), status: :created
         else
           render json: { errors: @lecture.errors.full_messages }, status: :unprocessable_entity
         end
@@ -121,6 +123,17 @@ module Api
                                             .limit(limit)
 
         render json: { lectures: Lecture.as_json_reviews(@lectures) }
+      end
+
+      # サイトマップ用。レビューが1件以上ある授業のIDだけを昇順で返す。
+      # 最終更新日（lastmod）など、レビューや授業の作成・更新時刻から作る値は返さない。
+      # 匿名レビューは編集できないため、時刻からログイン投稿かどうかや同じ人の投稿を推測できてしまう
+      # （公開レビューAPIで時刻を返さないのと同じ理由）。粒度を日や月に丸めても返さない。
+      def sitemap
+        lecture_ids = Lecture.joins(:reviews).distinct.order('lectures.id').pluck('lectures.id')
+
+        expires_in SITEMAP_CACHE_DURATION, public: true
+        render json: { lecture_ids: lecture_ids }
       end
 
       private
