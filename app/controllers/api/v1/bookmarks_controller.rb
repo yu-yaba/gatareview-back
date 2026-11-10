@@ -9,7 +9,7 @@ module Api
       def create
         @bookmark = @lecture.bookmarks.build(user: current_user)
         
-        if @bookmark.save
+        if save_bookmark
           render json: { 
             success: true, 
             message: 'ブックマークに追加しました'
@@ -48,6 +48,14 @@ module Api
       end
 
       private
+
+      # 連打などで同時に届いた2件目は、DB の一意インデックスで止まる。検証と同じ文言で 422 を返す。
+      def save_bookmark
+        @bookmark.save
+      rescue ActiveRecord::RecordNotUnique
+        @bookmark.errors.add(:base, :already_bookmarked)
+        false
+      end
 
       def set_lecture
         @lecture = Lecture.find(params[:lecture_id])

@@ -1,0 +1,109 @@
+# API が利用者に返す検証エラーの文言。画面にそのまま表示されるので自然な日本語にする。
+# 全文は「%{attribute}%{message}」で組み立てる（例: コメントは30文字以上で入力してください）。
+# 項目名を付けると不自然な文言は errors.add(:base, :キー) で追加し、下の models.*.キー に置く。
+ja:
+  activerecord:
+    models:
+      review: レビュー
+      lecture: 授業
+      bookmark: ブックマーク
+      thank: ありがとう
+      user: ユーザー
+      site_setting: サイト設定
+    attributes:
+      review:
+        rating: 総合評価
+        content: コメント
+        lecture: 授業
+        lecture_id: 授業
+        user: ユーザー
+        user_id: ユーザー
+        textbook: 教科書
+        attendance: 出席確認
+        grading_type: 採点方法
+        content_difficulty: 単位取得難易度
+        content_quality: 内容充実度
+        period_year: 授業を受けた年
+        period_term: 開講
+        thanks_count: ありがとうの数
+      lecture:
+        title: 授業名
+        lecturer: 教授/講師名
+        faculty: 学部
+        reviews: レビュー
+        bookmarks: ブックマーク
+      bookmark:
+        user: ユーザー
+        user_id: ユーザー
+        lecture: 授業
+        lecture_id: 授業
+      thank:
+        user: ユーザー
+        user_id: ユーザー
+        review: レビュー
+        review_id: レビュー
+      user:
+        email: メールアドレス
+        name: 名前
+        provider: ログイン方法
+        provider_id: ログイン方法の識別子
+        avatar_url: プロフィール画像
+        reviews: レビュー
+        thanks: ありがとう
+        bookmarks: ブックマーク
+      site_setting:
+        id: 設定の番号
+        lecture_review_restriction_enabled: レビュー閲覧制限
+        last_updated_by: 最終更新者
+        last_updated_by_user_id: 最終更新者
+    errors:
+      models:
+        review:
+          already_reviewed: この授業にはすでにレビューを投稿しています
+        bookmark:
+          already_bookmarked: この授業はすでにブックマークしています
+        thank:
+          already_thanked: このレビューにはすでにありがとうを送っています
+          own_review: 自分のレビューにはありがとうできません
+        lecture:
+          attributes:
+            title:
+              taken: "・教授/講師名・学部が同じ授業はすでに登録されています"
+      messages:
+        record_invalid: "入力内容に誤りがあります: %{errors}"
+        restrict_dependent_destroy:
+          has_one: "%{record}があるため削除できません"
+          has_many: "%{record}があるため削除できません"
+  activemodel:
+    errors:
+      messages:
+        password_too_long: "は72バイト以内で入力してください"
+  errors:
+    format: "%{attribute}%{message}"
+    messages:
+      accepted: を承諾してください
+      blank: を入力してください
+      confirmation: が%{attribute}と一致しません
+      empty: を入力してください
+      equal_to: は%{count}にしてください
+      even: は偶数にしてください
+      exclusion: は使用できません
+      greater_than: は%{count}より大きい値にしてください
+      greater_than_or_equal_to: は%{count}以上の値にしてください
+      in: は%{count}の範囲で入力してください
+      inclusion: は選択肢から選んでください
+      invalid: が正しくありません
+      less_than: は%{count}より小さい値にしてください
+      less_than_or_equal_to: は%{count}以下の値にしてください
+      model_invalid: "入力内容に誤りがあります: %{errors}"
+      not_a_number: は数値で入力してください
+      not_an_integer: は整数で入力してください
+      odd: は奇数にしてください
+      other_than: は%{count}以外の値にしてください
+      password_too_long: は72バイト以内で入力してください
+      present: は入力しないでください
+      required: を指定してください
+      taken: はすでに使われています
+      too_long: は%{count}文字以内で入力してください
+      too_short: は%{count}文字以上で入力してください
+      wrong_length: は%{count}文字で入力してください

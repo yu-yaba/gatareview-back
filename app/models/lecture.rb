@@ -10,6 +10,7 @@ class Lecture < ApplicationRecord
   before_validation :strip_attributes
   
   validates :title, :lecturer, :faculty, presence: true
+  validates :title, :lecturer, :faculty, length: { maximum: 255 }
   validates :title, uniqueness: { scope: %i[lecturer faculty] }
 
   # 検索用スコープ（MySQL対応：LIKEを使用した大文字小文字を区別しない検索）
