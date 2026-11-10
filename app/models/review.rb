@@ -34,9 +34,27 @@ class Review < ApplicationRecord
                          if: -> { new_record? || will_save_change_to_attribute?(attribute) }
   end
 
-  validates :user_id, uniqueness: { scope: :lecture_id, allow_nil: true, message: 'は同じ講義に複数のレビューを投稿できません' }
+  # ログイン利用者は1つの授業にレビューを1件だけ投稿できる（DB の一意インデックスでも保証する）。
+  # 投稿者や授業が変わるときだけ確認するので、過去にできた重複があっても本人は各レビューを編集できる。
+  validate :one_review_per_user_and_lecture,
+           if: -> { user_id.present? && (new_record? || will_save_change_to_user_id? || will_save_change_to_lecture_id?) }
+
+  # 同じ内容の再送かどうかを比べる、投稿フォームから受け取る項目。
+  SUBMITTED_ATTRIBUTES = %w[
+    rating content textbook attendance grading_type content_difficulty content_quality period_year period_term
+  ].freeze
+
+  def same_submission_as?(other)
+    SUBMITTED_ATTRIBUTES.all? { |name| self[name] == other[name] }
+  end
 
   private
+
+  def one_review_per_user_and_lecture
+    others = Review.where(user_id: user_id, lecture_id: lecture_id)
+    others = others.where.not(id: id) if persisted?
+    errors.add(:base, :already_reviewed) if others.exists?
+  end
 
   def rating_uses_half_star_steps
     return unless rating&.finite? && rating.between?(0.5, 5)

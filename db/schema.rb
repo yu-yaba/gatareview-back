@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_16_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_09_000000) do
   create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
@@ -52,6 +52,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_000000) do
     t.index ["lecture_id", "content_quality"], name: "index_reviews_on_lecture_id_and_content_quality"
     t.index ["lecture_id", "period_year"], name: "index_reviews_on_lecture_id_and_period_year"
     t.index ["lecture_id"], name: "index_reviews_on_lecture_id"
+    t.index ["user_id", "lecture_id"], name: "index_reviews_on_user_id_and_lecture_id", unique: true
     t.index ["user_id"], name: "index_reviews_on_user_id"
   end
 

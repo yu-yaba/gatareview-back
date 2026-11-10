@@ -495,6 +495,23 @@ RSpec.describe Api::V1::LecturesController, type: :request do
         end.not_to change(Lecture, :count)
 
         expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq('errors' => ['授業名を入力してください'])
+      end
+
+      it '登録済みの授業と同じなら、項目名つきの日本語の文言で422にすること' do
+        existing = FactoryBot.create(:lecture)
+        post '/api/v1/lectures', params: { lecture: existing.slice(:title, :lecturer, :faculty) }, as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq('errors' => ['授業名・教授/講師名・学部が同じ授業はすでに登録されています'])
+      end
+
+      it '列の長さを超える入力は、500ではなく日本語の文言で422にすること' do
+        post '/api/v1/lectures', params: { lecture: { title: 'あ' * 256, lecturer: '講師', faculty: '学部' } },
+                                 as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq('errors' => ['授業名は255文字以内で入力してください'])
       end
     end
   end

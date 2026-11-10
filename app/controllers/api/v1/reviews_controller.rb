@@ -25,21 +25,21 @@ module Api
           return
         end
 
-        @review = @lecture.reviews.new(review_attributes)
-        @review.user = current_user if current_user
-        
-        if @review.save
-          render json: {
-            success: true,
-            review: public_review_json(@review)
-          }, status: :created
-        else
+        result = ReviewSubmission.new(lecture: @lecture, user: current_user, attributes: review_attributes).call
+        @review = result.review
+
+        if result.status == :invalid
           render json: { success: false, errors: @review.errors.full_messages }, status: :unprocessable_entity
+        else
+          # 再送（同じ内容の投稿のやり直し）は新しく作らずに既存のレビューを返す
+          render json: { success: true, review: public_review_json(@review) },
+                 status: result.status == :created ? :created : :ok
         end
       end
 
       def index
-        reviews = @lecture.reviews.order(created_at: :asc)
+        # 同じ投稿時刻のレビューがあっても先頭（全文表示する1件）が変わらないよう id でも並べる
+        reviews = @lecture.reviews.order(created_at: :asc, id: :asc)
         access = review_access_state
 
         reviews_json = reviews.each_with_index.map do |review, index|
@@ -78,7 +78,7 @@ module Api
         
         review_attributes = review_params
 
-        if @review.update(review_attributes)
+        if DeadlockRetry.call { @review.update(review_attributes) }
           render json: {
             success: true,
             review: public_review_json(@review)
@@ -97,7 +97,11 @@ module Api
           return
         end
         
-        if @review.destroy
+        # ありがとうの追加・取り消しと同じくレビューの行をロックしてから消す。
+        # 処理中のありがとうを待ってから関連ごと消すので、外部キー違反で失敗しない。
+        # 同じ利用者の別のありがとうと重なるとデッドロックし得るので1回やり直す。
+        # 失敗した試行の状態を持ち越さないよう、試行ごとにロックして読み直したレコードを消す。
+        if DeadlockRetry.call { Review.transaction { Review.lock.find(@review.id).destroy } }
           render json: { success: true, message: 'レビューを削除しました' }
         else
           render json: { success: false, message: 'レビューの削除に失敗しました' }, status: :unprocessable_entity
@@ -105,7 +109,7 @@ module Api
       end
 
       def latest
-        @reviews = Review.includes(:lecture).order(created_at: :desc).limit(4)
+        @reviews = Review.includes(:lecture).order(created_at: :desc, id: :desc).limit(4)
         if @reviews.any?
           reviews_json = @reviews.map do |review|
             review_data = review.as_json(only: %i[id rating])

@@ -4,8 +4,9 @@
 - Base path: `/api/v1`
 - JSON API として利用する。
 - 認証必須 API は `Authorization: Bearer <JWT>` を要求する。
-- validation error は主に `422 Unprocessable Entity` を返す。
+- validation error は主に `422 Unprocessable Entity` を返す。`errors` は画面にそのまま出せる日本語の文言の配列（例: `コメントは30文字以上で入力してください`）。文言は `config/locales/ja.yml` で管理し、フロントは文言の一致で分岐しない。
 - 権限不足は `403 Forbidden`、未認証は `401 Unauthorized` を返す。
+- 存在しない id は `404` で `{ "error": "レビューが見つかりません" }` のように、リクエストの形が不正なとき（必要なキーがない・JSON が壊れている）は `400` で `{ "error": "リクエストの形式が正しくありません" }` を返す。
 
 ## 認証
 
@@ -62,6 +63,7 @@
   - `lecture.title`
   - `lecture.lecturer`
   - `lecture.faculty`
+- 入力エラーは `422` で `{ "errors": ["授業名を入力してください", ...] }`（各項目255文字まで）。
 
 ### `GET /lectures/popular`
 - 認証: 不要
@@ -86,7 +88,7 @@
 - 認証: 任意
 - 目的: 講義に紐づくレビュー一覧と閲覧権限状態を返す。
 - Response:
-  - `reviews`: レビュー配列。各要素は `id`, `rating`, `content`, `lecture_id`, `textbook`, `attendance`, `grading_type`, `content_difficulty`, `content_quality`, `period_year`, `period_term`, `thanks_count`, `is_own` のみ。古い順に並べて返す。
+  - `reviews`: レビュー配列。各要素は `id`, `rating`, `content`, `lecture_id`, `textbook`, `attendance`, `grading_type`, `content_difficulty`, `content_quality`, `period_year`, `period_term`, `thanks_count`, `is_own` のみ。古い順（同じ投稿時刻なら id の小さい順）に並べて返す。
     - `is_own`: Bearer トークンのユーザーが投稿者本人なら `true`。未ログイン、無効なトークン、匿名投稿、他人の投稿は `false`。
   - `access`: `restriction_enabled`, `access_granted`
 - 注意:
@@ -107,10 +109,12 @@
   - `review.grading_type`
   - `review.content_difficulty`
   - `review.content_quality`
-- Response: `{ "success": true, "review": { ... } }`。`review` は `GET /lectures/:lecture_id/reviews` の各要素と同じ項目（ログイン投稿なら `is_own: true`、匿名投稿なら `false`）。
+- Response: `201` で `{ "success": true, "review": { ... } }`。`review` は `GET /lectures/:lecture_id/reviews` の各要素と同じ項目（ログイン投稿なら `is_own: true`、匿名投稿なら `false`）。
+- 再送: ログインユーザーが同じ講義に、`review` の全項目が同じレビューを10分以内に投稿済みなら、通信のやり直しとみなして新しく作らず、本人のそのレビューを `200` で同じ形で返す。項目が1つでも違えば別の投稿として扱う（2件目なので `422`）。
+  - 匿名投稿は再送としてまとめない。匿名どうしをまとめると、公開中のレビュー本文を匿名で送り直すだけで、そのレビューが匿名投稿かログイン投稿かを見分けられてしまうため。
 - 注意:
   - production では `RECAPTCHA_SECRET_KEY` が必須。
-  - ログインユーザーは同一講義に複数レビューを投稿できない。
+  - ログインユーザーは同一講義に複数レビューを投稿できない。2件目は `422` で `errors: ["この授業にはすでにレビューを投稿しています"]`。同時に届いた投稿も DB の一意インデックスで止め、同じ応答にする。
 
 ### `PATCH /reviews/:id`
 - 認証: 必須
@@ -118,6 +122,7 @@
 - Body: 作成時と同じ `review` 項目。
 - Response: `{ "success": true, "review": { ... } }`。`review` は一覧の各要素と同じ項目で `is_own: true`。
 - 権限: 投稿者本人のみ。
+- 一意インデックス追加前にできた重複レビューも、本人はそれぞれ編集できる（重複の確認は投稿者・講義が変わるときだけ行う）。
 
 ### `DELETE /reviews/:id`
 - 認証: 必須
@@ -133,13 +138,14 @@
 - 認証: 不要（トークンを送っても応答は変わらない）
 - 目的: 最新レビューを最大 4 件返す。
 - Response:
-  - 配列（新しい順）。各要素は `id`, `rating`, `content`, `lecture`（`id`, `title`, `lecturer`, `faculty`）のみ。投稿者情報（`user`, `user_id`）と投稿時刻は返さない。
+  - 配列（新しい順。同じ投稿時刻なら id の大きい順）。各要素は `id`, `rating`, `content`, `lecture`（`id`, `title`, `lecturer`, `faculty`）のみ。投稿者情報（`user`, `user_id`）と投稿時刻は返さない。
 
 ## ブックマーク
 
 ### `POST /lectures/:lecture_id/bookmarks`
 - 認証: 必須
 - 目的: 現在ユーザーの講義ブックマークを作成する。
+- 登録済みなら（連打で同時に届いた場合も）`422` で `errors: ["この授業はすでにブックマークしています"]`。
 
 ### `GET /lectures/:lecture_id/bookmarks`
 - 認証: 必須
@@ -156,6 +162,7 @@
 - 認証: 必須
 - 目的: 現在ユーザーが対象レビューにありがとうを送る。
 - Response: `thanks_count` を含む。
+- 送信済みなら（連打で同時に届いた場合も）`422` で `errors: ["このレビューにはすでにありがとうを送っています"]`。自分のレビューには `422` で `errors: ["自分のレビューにはありがとうできません"]`。
 
 ### `GET /reviews/:review_id/thanks`
 - 認証: 必須
