@@ -204,6 +204,23 @@ RSpec.describe 'User data security', type: :request do
       expect(route_paths).not_to include('/api/v1/timetable(.:format)', '/api/v1/timetable/entries(.:format)',
                                          '/api/v1/timetable/entries/:id(.:format)')
     end
+
+    it 'does not route lecture update or delete' do
+      lecture_routes = Rails.application.routes.routes.select do |route|
+        route.path.spec.to_s == '/api/v1/lectures/:id(.:format)'
+      end
+
+      expect(lecture_routes.map(&:verb)).to contain_exactly('GET')
+    end
+  end
+
+  describe 'response headers' do
+    it 'does not expose the server processing time' do
+      get '/api/v1/reviews/total'
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers).not_to have_key('X-Runtime')
+    end
   end
 
   describe 'bounded pagination' do

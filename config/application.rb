@@ -32,6 +32,10 @@ module App
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
 
+    # X-Runtime（処理時間）ヘッダーを返さない。フロントは使っておらず、処理時間の差から
+    # 内部の分岐（該当データの有無など）を推測する手がかりになるため。
+    config.middleware.delete Rack::Runtime
+
     config.generators do |g|
       g.test_framework :rspec
     end

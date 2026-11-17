@@ -12,7 +12,8 @@ Rails.application.routes.draw do
       get '/lectures/no_reviews', to: 'lectures#no_reviews'
       # resources :lectures の show（/lectures/:id）より前に置く
       get '/lectures/sitemap', to: 'lectures#sitemap'
-      resources :lectures do
+      # 授業の更新・削除 API はないので、実装済みの操作だけをルーティングする
+      resources :lectures, only: %i[index show create] do
         resources :reviews, only: %i[index create]
         # カスタムブックマークルート
         post 'bookmarks', to: 'bookmarks#create'
