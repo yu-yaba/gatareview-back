@@ -219,7 +219,7 @@ GEM
     psych (5.5.0)
       date
       stringio
-    puma (8.0.2)
+    puma (8.0.4)
       nio4r (~> 2.0)
     racc (1.8.1)
     rack (3.2.8)
@@ -399,7 +399,7 @@ DEPENDENCIES
   kaminari
   mysql2 (~> 0.5.6)
   pry-rails
-  puma (~> 8.0)
+  puma (~> 8.0, >= 8.0.4)
   rack-attack
   rack-cors
   rails (~> 8.1.4, >= 8.1.4.1)
