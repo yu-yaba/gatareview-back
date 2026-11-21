@@ -88,7 +88,7 @@ heroku run bin/rails db:migrate -a gatareview-back
 
 これらが出ている場合は env / migration 漏れを優先して確認する。
 
-## 2026年10月のセキュリティ更新
+## 2026年10〜11月のセキュリティ更新
 
 - Ruby 3.4.13 / Rails 8.1.4 / Puma 8.0.4を使用する。
 - 既存の十分に強い `JWT_SECRET_KEY` は維持できる。鍵を変更すると既存ユーザーは再ログインが必要になる。
