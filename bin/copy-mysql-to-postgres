@@ -9,6 +9,9 @@
 # - 写す先のテーブルにデータがあれば止める。切替前のリハーサルなどで上書きしてよいときだけ
 #   ALLOW_TRUNCATE=yes を付ける（本番の切替後に誤って流すと、それまでの書き込みが消える）。
 # - 写したあと主キーの採番を最大値の次に合わせる。
+# - 先に MySQL の全テーブルを作業ファイルへ書き出し、そのあと PostgreSQL 側は1つのトランザクションで
+#   「空にする → 全テーブルを読み込む → 採番を合わせる」を行う。途中で失敗すれば PostgreSQL は元のまま残る。
+# - PostgreSQL は NUL 文字（U+0000）を保存できないので、書き出したデータに含まれていれば何も変えずに止める。
 # - パスワードはコマンドに書かない。MySQL は設定ファイル、PostgreSQL は PG_URL か ~/.pgpass を使う。
 set -euo pipefail
 
@@ -46,16 +49,39 @@ if [ "$existing" != "0" ]; then
   echo "ALLOW_TRUNCATE=yes: emptying ${existing} existing rows in the target" >&2
 fi
 
-psql_run -c "TRUNCATE $(IFS=,; echo "${TABLES[*]}") RESTART IDENTITY"
+# 個人データを含むので、作業ファイルは本人だけが読める場所に作り、終わったら消す。
+umask 077
+work_dir=$(mktemp -d)
+trap 'rm -rf "$work_dir"' EXIT
+
+load_sql="${work_dir}/load.sql"
+{
+  echo "BEGIN;"
+  echo "TRUNCATE $(IFS=,; echo "${TABLES[*]}") RESTART IDENTITY;"
+} > "$load_sql"
 
 for table in "${TABLES[@]}"; do
   columns=$(psql_run -At -c "SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$table'")
   expressions=$(IFS=,; for column in $columns; do copy_expression "$column"; printf ','; done)
   expressions="${expressions%,}"
 
-  mysql_query "SELECT CONCAT_WS('\\t', ${expressions}) FROM \`${table}\` ORDER BY id" |
-    psql_run -c "\\copy ${table} (${columns}) FROM STDIN"
+  data_file="${work_dir}/${table}.tsv"
+  mysql_query "SELECT CONCAT_WS('\\t', ${expressions}) FROM \`${table}\` ORDER BY id" > "$data_file"
+  if [ "$(LC_ALL=C tr -cd '\000' < "$data_file" | wc -c | tr -d ' ')" != "0" ]; then
+    echo "${table} contains a NUL character, which PostgreSQL cannot store. Nothing was changed in PostgreSQL." >&2
+    exit 1
+  fi
+  echo "exported ${table}: $(wc -l < "$data_file" | tr -d ' ') rows"
 
-  psql_run -c "SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM ${table}" >/dev/null
+  {
+    echo "\\copy ${table} (${columns}) FROM '${data_file}'"
+    echo "SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM ${table};"
+  } >> "$load_sql"
+done
+
+echo "COMMIT;" >> "$load_sql"
+psql_run -f "$load_sql" >/dev/null
+
+for table in "${TABLES[@]}"; do
   echo "copied ${table}: $(psql_run -At -c "SELECT COUNT(*) FROM ${table}") rows"
 done

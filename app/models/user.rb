@@ -12,6 +12,10 @@ class User < ApplicationRecord
 
   # Google認証用のユーザー作成またはログイン
   def self.from_google_oauth(google_user_info)
+    # PostgreSQL は NUL 文字（U+0000）を保存できず、そのままだと 500 になる。
+    # Google のプロフィール（名前など）に含まれていれば取り除いてから使う。
+    google_user_info = google_user_info.to_h.transform_values { |value| value.is_a?(String) ? value.delete("\0") : value }
+
     # トランザクションでデータ整合性を保証
     transaction do
       # 既存ユーザーをロックして競合状態を防ぐ

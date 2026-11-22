@@ -52,6 +52,14 @@ RSpec.describe 'PostgreSQL での比較と制約違反' do
       expect { User.from_google_oauth(identity) }.to raise_error(ActiveRecord::RecordInvalid)
     end
 
+    it 'Google のプロフィールに NUL 文字があれば取り除いて保存すること' do
+      user = User.from_google_oauth('sub' => 'nul-sub', 'email' => "nul\u0000@example.com",
+                                    'name' => "Bad\u0000Name", 'picture' => "https://example.com/a\u0000.png")
+
+      expect(user.reload).to have_attributes(email: 'nul@example.com', name: 'BadName',
+                                             avatar_url: 'https://example.com/a.png')
+    end
+
     it '検証をすり抜けた同時作成でも、トランザクションを壊さずに読み直して RecordNotFound で止まること' do
       allow(User).to receive(:create!).and_wrap_original do |_original, attributes|
         User.new(attributes).tap { |user| user.save!(validate: false) }

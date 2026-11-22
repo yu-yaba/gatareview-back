@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 本番の PostgreSQL に、アプリ用の最小権限ロール gatareview_runtime を作る（あればパスワードを変えて権限をそろえ直す）。
 #
-#   ADMIN_PG_URL='postgres://avnadmin:...@<host>:<port>/<db>?sslmode=verify-full&sslrootcert=config/certs/aiven-ca.pem' \
+#   ADMIN_PG_URL='postgres://avnadmin@<host>:<port>/<db>?sslmode=verify-full&sslrootcert=config/certs/aiven-ca.pem' \
 #   RUNTIME_URL_FILE=~/.gatareview-postgres-runtime-url \
 #     bin/create-postgres-runtime-role
 #
