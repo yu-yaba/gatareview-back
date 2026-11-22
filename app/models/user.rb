@@ -12,6 +12,10 @@ class User < ApplicationRecord
 
   # Google認証用のユーザー作成またはログイン
   def self.from_google_oauth(google_user_info)
+    # PostgreSQL は NUL 文字（U+0000）を保存できず、そのままだと 500 になる。
+    # Google のプロフィール（名前など）に含まれていれば取り除いてから使う。
+    google_user_info = google_user_info.to_h.transform_values { |value| value.is_a?(String) ? value.delete("\0") : value }
+
     # トランザクションでデータ整合性を保証
     transaction do
       # 既存ユーザーをロックして競合状態を防ぐ
@@ -27,14 +31,18 @@ class User < ApplicationRecord
         user
       else
         # 新規ユーザー作成（Unique制約違反を適切にハンドリング）
+        # PostgreSQL は制約違反でトランザクション全体を使えなくするため、作成だけをセーブポイントで
+        # 囲み、違反したらそこまで戻してから読み直す。
         begin
-          create!(
-            email: google_user_info['email'],
-            name: google_user_info['name'],
-            provider: 'google',
-            provider_id: google_user_info['sub'],
-            avatar_url: google_user_info['picture']
-          )
+          transaction(requires_new: true) do
+            create!(
+              email: google_user_info['email'],
+              name: google_user_info['name'],
+              provider: 'google',
+              provider_id: google_user_info['sub'],
+              avatar_url: google_user_info['picture']
+            )
+          end
         rescue ActiveRecord::RecordNotUnique => e
           Rails.logger.warn "Duplicate user creation attempt: #{e.class}"
           # 競合が発生した場合は再度検索

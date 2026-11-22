@@ -71,6 +71,7 @@ RSpec.describe 'Rate limit counter store and per-worker limits', type: :request 
     env = {
       'RAILS_ENV' => 'production',
       'SECRET_KEY_BASE_DUMMY' => '1',
+      'DATABASE_SSL_CA' => Rails.root.join('config/certs/aiven-ca.pem').to_s,
       'WEB_CONCURRENCY' => '4',
       'AUTH_RATE_LIMIT_PER_MINUTE' => nil,
       'API_RATE_LIMIT_PER_FIVE_MINUTES' => nil,

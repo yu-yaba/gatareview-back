@@ -40,7 +40,7 @@ RSpec.describe Lecture, type: :model do
     it '対象授業がない場合はレビューを集計しないこと' do
       record_selects do |statements|
         expect(described_class.as_json_reviews(described_class.where(id: -1))).to eq([])
-        expect(statements.none? { |sql| sql.include?('FROM `reviews`') }).to be(true)
+        expect(statements.none? { |sql| sql.include?('FROM "reviews"') }).to be(true)
       end
     end
 

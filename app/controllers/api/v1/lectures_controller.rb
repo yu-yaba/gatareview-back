@@ -31,11 +31,11 @@ module Api
       MOST_REVIEWED_ORDER = 'COUNT(reviews.id) DESC, lectures.id DESC'
       SORT_ORDERS = {
         # 評価の高い順（レビューがある授業のみ）
-        'highestRating' => 'AVG(reviews.rating) DESC, COUNT(reviews.id) DESC, lectures.id DESC',
+        'highestRating' => 'AVG(reviews.rating) DESC NULLS LAST, COUNT(reviews.id) DESC, lectures.id DESC',
         # レビュー数の多い順（レビューがある授業のみ）
         'mostReviewed' => MOST_REVIEWED_ORDER,
         # 最新レビュー順（レビューの最新投稿日時順。レビューがない授業は最後）
-        'newest' => 'MAX(reviews.created_at) DESC, lectures.created_at DESC, lectures.id DESC'
+        'newest' => 'MAX(reviews.created_at) DESC NULLS LAST, lectures.created_at DESC, lectures.id DESC'
       }.freeze
       REVIEWED_ONLY_SORTS = %w[highestRating mostReviewed].freeze
       SITEMAP_CACHE_DURATION = 1.hour

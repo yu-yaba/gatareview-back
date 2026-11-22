@@ -10,8 +10,14 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_22_000000) do
-  create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+ActiveRecord::Schema[8.1].define(version: 2026_11_23_000000) do
+  # These are extensions that must be enabled in order to support this database
+  enable_extension "pg_catalog.plpgsql"
+
+  # Custom collations (config/initializers/postgresql_collation_schema_dumper.rb)
+  execute "CREATE COLLATION IF NOT EXISTS \"ci_ai\" (provider = icu, locale = 'und-u-ks-level1', deterministic = false)"
+
+  create_table "bookmarks", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
     t.datetime "created_at", null: false
@@ -21,10 +27,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_22_000000) do
     t.index ["user_id"], name: "index_bookmarks_on_user_id"
   end
 
-  create_table "lectures", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
-    t.string "title"
-    t.string "lecturer"
-    t.string "faculty"
+  create_table "lectures", force: :cascade do |t|
+    t.string "title", collation: "ci_ai"
+    t.string "lecturer", collation: "ci_ai"
+    t.string "faculty", collation: "ci_ai"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["lecturer"], name: "index_lectures_on_lecturer"
@@ -33,7 +39,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_22_000000) do
     t.index ["title"], name: "index_lectures_on_title"
   end
 
-  create_table "reviews", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+  create_table "reviews", force: :cascade do |t|
     t.float "rating"
     t.text "content"
     t.bigint "lecture_id", null: false
@@ -56,7 +62,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_22_000000) do
     t.index ["user_id"], name: "index_reviews_on_user_id"
   end
 
-  create_table "site_settings", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+  create_table "site_settings", force: :cascade do |t|
     t.boolean "lecture_review_restriction_enabled", default: false, null: false
     t.bigint "last_updated_by_user_id"
     t.datetime "created_at", null: false
@@ -66,7 +72,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_22_000000) do
     t.index ["singleton_guard"], name: "index_site_settings_on_singleton_guard", unique: true
   end
 
-  create_table "thanks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+  create_table "thanks", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "review_id"
     t.datetime "created_at", null: false
@@ -76,8 +82,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_22_000000) do
     t.index ["user_id"], name: "index_thanks_on_user_id"
   end
 
-  create_table "users", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
-    t.string "email", null: false
+  create_table "users", force: :cascade do |t|
+    t.string "email", null: false, collation: "ci_ai"
     t.string "name", null: false
     t.string "provider", null: false
     t.string "provider_id", null: false

@@ -41,7 +41,7 @@
 | Language | Ruby 3.4.13 |
 | Framework | Rails 8.1.4.1 |
 | API | Rails API mode |
-| Database | MySQL |
+| Database | PostgreSQL 18 |
 | Auth | JWT, Google OAuth |
 | Test | RSpec, Factory Bot |
 | Lint | RuboCop |
@@ -62,7 +62,7 @@ spec/factories/           Factory Bot
 
 - Ruby 3.4.13
 - Bundler
-- MySQL 8 系を推奨
+- PostgreSQL 18（授業検索の照合順序 `ci_ai` が LIKE で使えるのは 18 以降）
 - 実運用と同じ確認をしたい場合は Docker 実行を推奨
 
 ## セットアップ
@@ -80,10 +80,10 @@ bundle install
 最小構成の例:
 
 ```env
-MYSQL_DATABASE=gatareview_development
-MYSQL_USER=root
-MYSQL_PASSWORD=your_password
-MYSQL_HOST=127.0.0.1
+POSTGRES_DB=gatareview_development
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_password
+POSTGRES_HOST=127.0.0.1
 
 # 開発・テストでは未設定可。本番は専用の32バイト以上の乱数鍵を設定する
 JWT_SECRET_KEY=
@@ -120,10 +120,12 @@ http://localhost:3000
 
 | 変数名 | 必須 | 用途 | 本番例 |
 | --- | --- | --- | --- |
-| `MYSQL_DATABASE` | Yes | 開発 DB 名 | Heroku アドオン値 |
-| `MYSQL_USER` | Yes | 開発 DB ユーザー | Heroku アドオン値 |
-| `MYSQL_PASSWORD` | Yes | 開発 DB パスワード | Heroku アドオン値 |
-| `MYSQL_HOST` | Yes | 開発 DB ホスト | Heroku アドオン値 |
+| `POSTGRES_DB` | Yes (development) | 開発 DB 名 | 本番は `DATABASE_URL` を使う |
+| `POSTGRES_USER` | Yes (development/test) | 開発・テスト DB ユーザー | 本番は `DATABASE_URL` を使う |
+| `POSTGRES_PASSWORD` | Yes (development/test) | 開発・テスト DB パスワード | 本番は `DATABASE_URL` を使う |
+| `POSTGRES_HOST` | Yes (development/test) | 開発・テスト DB ホスト | 本番は `DATABASE_URL` を使う |
+| `POSTGRES_PORT` | Optional | 開発・テスト DB ポート（既定 5432） | - |
+| `DATABASE_SSL_CA` | Yes in production | 本番 DB の CA 証明書のパス | `/app/config/certs/aiven-ca.pem` |
 | `JWT_SECRET_KEY` | Yes in production | JWT専用の署名キー | 32バイト以上の乱数鍵。`ruby -rsecurerandom -e 'puts SecureRandom.hex(32)'` で生成 |
 | `SECRET_KEY_BASE` | Yes in production | Railsの秘密鍵（JWT鍵とは別） | Rails secret |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google トークン検証 | Google Cloud Console の値 |
@@ -140,13 +142,13 @@ http://localhost:3000
 
 production では `DATABASE_URL` を唯一の DB 接続設定として使います。`JAWSDB_URL` や `HEROKU_DB_*` のような旧設定は参照しません。
 
-本番 MySQL 接続は `ssl_mode: verify_identity` を指定し、暗号化と証明書・ホスト名の検証を必須にします。Aiven など独自 CA を使う場合は、提供元の CA 証明書を実行環境に配置し、`MYSQL_SSL_CA` に読み取り可能な絶対パスを指定してください。未設定時はシステムの CA を使います。URL の `ssl_mode` で検証を弱める設定や、存在しない CA パスは起動時に拒否します。`ssl-mode` は mysql2 の設定名として認識されません。
+本番 PostgreSQL 接続は `sslmode: verify-full` を指定し、暗号化と証明書・ホスト名の検証を必須にします。Aiven など独自 CA を使う場合は、提供元の CA 証明書を実行環境に配置し、`DATABASE_SSL_CA` に読み取り可能な絶対パスを指定してください（必須。pg gem 同梱の libpq は OS の CA ストアを読まないため、未設定では起動しません）。`DATABASE_URL` の `sslmode` は設定ファイルより優先されるため、`sslmode=require` など検証を弱める URL や、存在しない CA パスは起動時に拒否します。
 
 デプロイ前に実行環境の接続で `SHOW SESSION STATUS LIKE 'Ssl_cipher'` が空でないことと、誤った CA またはホスト名では接続が失敗することを確認してください。CA が未配置・未検証のまま本番へ反映すると DB 接続に失敗します。
 
 `site_settings` は環境変数ではなく DB テーブルです。review access を本番で使う場合は env 追加とは別に migration 実行が必要です。
 
-JawsDB から Aiven for MySQL へ切り替えるときの実行手順は [docs/aiven-migration-runbook.md](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/aiven-migration-runbook.md) を参照してください。
+MySQL から PostgreSQL へ切り替えるときの実行手順は [docs/postgresql-migration-runbook.md](docs/postgresql-migration-runbook.md) を参照してください。JawsDB から Aiven for MySQL へ移したときの記録は [docs/aiven-migration-runbook.md](docs/aiven-migration-runbook.md) にあります。
 
 ## 開発コマンド
 

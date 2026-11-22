@@ -8,9 +8,6 @@ ruby '3.4.13'
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem 'rails', '~> 8.1.4', '>= 8.1.4.1'
 
-# Use mysql as the database for Active Record
-# gem "mysql2", "~> 0.5"
-
 # Use the Puma web server [https://github.com/puma/puma]
 gem 'puma', '~> 8.0', '>= 8.0.4'
 
@@ -57,7 +54,7 @@ gem 'kaminari'
 
 gem 'pry-rails'
 
-gem 'mysql2', '~> 0.5.6'
+gem 'pg', '~> 1.6'
 
 gem 'rspec-rails'
 
@@ -80,7 +77,3 @@ end
 
 group :test do
 end
-
-# group :production do
-#   gem 'pg', '~> 1.2', '>= 1.2.3'
-# end

@@ -19,8 +19,8 @@
 | 変数名 | 必須 | 確認内容 |
 | --- | --- | --- |
 | `JWT_SECRET_KEY` | Yes | 32バイト以上のランダムな専用鍵。未設定・空・短い鍵では起動を拒否する。Rails秘密鍵へのフォールバックはしない |
-| `DATABASE_URL` | Yes | 本番DBの唯一の接続先。旧 `JAWSDB_URL` への自動フォールバックはない |
-| `MYSQL_SSL_CA` | Provider-dependent | Aivenでは必須。Ruby buildpackで同梱する `config/certs/aiven-ca.pem` の実行時パス `/app/config/certs/aiven-ca.pem` を指定する。他の提供元でも独自CAを使う場合はその証明書のパスを指定する。未指定時はライブラリ既定のCAを使う |
+| `DATABASE_URL` | Yes | 本番DB（PostgreSQL）の唯一の接続先。`sslmode` を含めないか `sslmode=verify-full` にする。Aiven の URI にある `sslmode=require` のままでは起動を拒否する（証明書を検証しないため） |
+| `DATABASE_SSL_CA` | Provider-dependent | 必須。Ruby buildpackで同梱する `config/certs/aiven-ca.pem` の実行時パス `/app/config/certs/aiven-ca.pem` を指定する。未指定・`system`・読めないパスでは起動を拒否する（pg gem 同梱の libpq は OS の CA ストアを読まないため）。旧 `MYSQL_SSL_CA` は使わない |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google ログインの token 検証値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |
 | `RECAPTCHA_SECRET_KEY` | Feature-based | 本番レビュー投稿で必要 |
@@ -32,11 +32,11 @@
 | `FRONTEND_URL` | Recommended | `https://www.gatareview.com` |
 | `ADMIN_EMAILS` | Feature-based | `/admin/review-access` に入るメールアドレス |
 
-DB 移行を伴う切替は [aiven-migration-runbook.md](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/aiven-migration-runbook.md) の手順に従う。
+MySQL から PostgreSQL への切替は [postgresql-migration-runbook.md](postgresql-migration-runbook.md) の手順に従う。[aiven-migration-runbook.md](aiven-migration-runbook.md) は JawsDB から Aiven for MySQL へ移したときの記録。
 
 ### AivenのCA証明書
 
-`config/certs/aiven-ca.pem` はAiven Consoleの接続情報から取得した公開CA証明書で、秘密鍵は含まない。証明書を含むコミットを先にデプロイしてから `MYSQL_SSL_CA` を設定する。ファイルがない旧リリースへのロールバック時には、この設定も旧リリースに合わせる必要がある。
+`config/certs/aiven-ca.pem` はAiven Consoleの接続情報から取得した公開CA証明書で、秘密鍵は含まない。証明書を含むコミットを先にデプロイしてから `DATABASE_SSL_CA` を設定する。PostgreSQL のサービスでも同じプロジェクトの CA を使うが、切替前に Aiven Console の CA と一致するか確認する。ファイルがない旧リリースへのロールバック時には、この設定も旧リリースに合わせる必要がある。
 
 CAのローテーション通知を受けたら、Aivenが配布する現在・次期CAを含むバンドル全体でファイルを更新し、期限と接続を確認して再デプロイする。証明書検証を無効化して接続を復旧しない。[Aivenの証明書要件](https://aiven.io/docs/platform/concepts/tls-ssl-certificates)
 
@@ -94,7 +94,7 @@ heroku run bin/rails db:migrate -a gatareview-back
 - 既存の十分に強い `JWT_SECRET_KEY` は維持できる。鍵を変更すると既存ユーザーは再ログインが必要になる。
 - `token_version` を含む未適用のmigrationを、フロントの更新前に実行する。
 - API失効に失敗した場合、フロントはログアウトを完了せず再試行を案内する。
-- 本番MySQLは暗号化と証明書・ホスト名の検証を必須にする。DB提供元のCAを配置し、`Ssl_cipher` が空でないことと、誤ったCA・ホスト名の接続が拒否されることを反映前に確認する。
+- 本番DBは暗号化と証明書・ホスト名の検証を必須にする（PostgreSQL では `sslmode=verify-full`）。DB提供元のCAを配置し、`pg_stat_ssl` で接続が暗号化されていることと、誤ったCA・ホスト名の接続が拒否されることを反映前に確認する。
 
 ## 転送ヘッダーとリクエスト制限
 
@@ -122,7 +122,7 @@ heroku run bin/rails db:migrate -a gatareview-back
 
 - シラバスの取得は管理用のコマンドに限定している。HTTPSの設定済み配信元と同じホスト・ポートへのリダイレクトだけを許可し、別ホスト、HTTP、認証情報を含むURLは接続前に拒否する。
 - Dockerイメージには環境変数ファイル、Railsの復号鍵、DBダンプ、ブラウザ操作の記録や確認画像を含めない。環境変数と鍵は実行環境で管理する。
-- CIはMySQL 8.4.13を使う。ローカルの旧DBは別ボリュームへ移す [移行手順](/Users/kawaiyuya/Desktop/gatareview/gatareview-back/docs/mysql84-local-migration.md) に従い、本番DBも提供元のバージョンとサポート期限を確認する。
+- CIは PostgreSQL 18 を使う。本番DBも提供元のバージョンとサポート期限を確認する。
 
 ## DB接続の再利用
 

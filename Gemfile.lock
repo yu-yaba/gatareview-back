@@ -169,8 +169,6 @@ GEM
     msgpack (1.8.7)
     multi_xml (0.9.1)
       bigdecimal (>= 3.1, < 5)
-    mysql2 (0.5.7)
-      bigdecimal
     net-imap (0.6.7)
       date
       net-protocol
@@ -206,6 +204,11 @@ GEM
     parser (3.3.13.0)
       ast (~> 2.4.1)
       racc
+    pg (1.7.0)
+    pg (1.7.0-aarch64-linux)
+    pg (1.7.0-arm64-darwin)
+    pg (1.7.0-x86_64-darwin)
+    pg (1.7.0-x86_64-linux)
     pp (0.6.4)
       prettyprint
     prettyprint (0.2.0)
@@ -397,7 +400,7 @@ DEPENDENCIES
   httparty
   jwt
   kaminari
-  mysql2 (~> 0.5.6)
+  pg (~> 1.6)
   pry-rails
   puma (~> 8.0, >= 8.0.4)
   rack-attack

@@ -9,7 +9,7 @@ WORKDIR /app
 
 # 必要なパッケージをインストール
 RUN apt-get update -qq && \
-    apt-get install -y default-mysql-client vim && \
+    apt-get install -y postgresql-client vim && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
