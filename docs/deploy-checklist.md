@@ -19,7 +19,7 @@
 | 変数名 | 必須 | 確認内容 |
 | --- | --- | --- |
 | `JWT_SECRET_KEY` | Yes | 32バイト以上のランダムな専用鍵。未設定・空・短い鍵では起動を拒否する。Rails秘密鍵へのフォールバックはしない |
-| `DATABASE_URL` | Yes | 本番DB（PostgreSQL）の唯一の接続先。`sslmode` を含めないか `sslmode=verify-full` にする。Aiven の URI にある `sslmode=require` のままでは起動を拒否する（証明書を検証しないため） |
+| `DATABASE_URL` | Yes | 本番DB（PostgreSQL）の唯一の接続先。`sslmode` を含めないか `sslmode=verify-full` にする。Aiven の URI にある `sslmode=require` のままでは起動を拒否する（証明書を検証しないため）。`?pool=` も付けない（`min_connections` と同時に指定すると Rails が起動を止める） |
 | `DATABASE_SSL_CA` | Provider-dependent | 必須。Ruby buildpackで同梱する `config/certs/aiven-ca.pem` の実行時パス `/app/config/certs/aiven-ca.pem` を指定する。未指定・`system`・読めないパスでは起動を拒否する（pg gem 同梱の libpq は OS の CA ストアを読まないため）。旧 `MYSQL_SSL_CA` は使わない |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google ログインの token 検証値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |
@@ -28,7 +28,7 @@
 | `AUTH_RATE_LIMIT_PER_MINUTE` | Optional | Google認証APIのIP単位・dyno単位の上限。既定値 `10`。各Pumaワーカーはこれを `WEB_CONCURRENCY` で割った値（切り上げ）で制限する |
 | `API_RATE_LIMIT_PER_FIVE_MINUTES` | Optional | API全体のIP単位・dyno単位の上限。既定値 `300`。割り方は上と同じ |
 | `RATE_LIMIT_FORWARDING_SECRET` | Recommended | フロントのサーバーが付ける利用者IPの署名鍵。32バイト以上のランダム値で、Vercelの同名の変数と完全に同じ値にする。未設定・短い値では署名を無視し、従来どおりルーターが見たIPで制限する |
-| `DB_MIN_CONNECTIONS` | Optional | 各 Puma ワーカーが常に保つ DB 接続の数。既定値 `2`。DB の接続上限（Aiven 無料プランは20、うち3は管理用）に収まるようにする |
+| `DB_MIN_CONNECTIONS` | Optional | 各 Puma ワーカーが常に保つ DB 接続の数。既定値 `2`。整数で設定する（数字以外は0本として扱われる）。DB の接続上限（Aiven 無料プランは20、うち3は管理用）に収まるようにする |
 | `WEB_CONCURRENCY` | Optional | Pumaのワーカー数。既定値 `2`。`config/puma.rb` と制限値の割り算の両方がこの値を使う |
 | `FRONTEND_URL` | Recommended | `https://www.gatareview.com` |
 | `ADMIN_EMAILS` | Feature-based | `/admin/review-access` に入るメールアドレス |

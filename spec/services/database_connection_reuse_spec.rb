@@ -3,6 +3,7 @@
 require 'rails_helper'
 require 'erb'
 require 'yaml'
+require Rails.root.join('lib/database_warm_up').to_s
 
 RSpec.describe 'Production database connection reuse' do
   # These read-only checks need real checkin/checkout, without fixture pinning.
@@ -17,7 +18,7 @@ RSpec.describe 'Production database connection reuse' do
   before do
     stub_const('ConnectionReuseRecord', record_class)
     record_class.establish_connection(
-      ActiveRecord::Base.connection_db_config.configuration_hash.except(:pool).merge(
+      ActiveRecord::Base.connection_db_config.configuration_hash.merge(
         max_connections: production_config.fetch('max_connections'),
         min_connections: production_config.fetch('min_connections'),
         idle_timeout: production_config.fetch('idle_timeout'), reaping_frequency: nil
@@ -40,15 +41,43 @@ RSpec.describe 'Production database connection reuse' do
   end
 
   it 'opens up to the minimum connections when the reaper prepopulates a warmed-up pool' do
-    # config/puma.rb の before_worker_boot と同じ手順をたどり、reaper が呼ぶ prepopulate を直接呼ぶ。
+    # config/puma.rb の before_worker_boot と同じ処理（DatabaseWarmUp）のあと、reaper が呼ぶ prepopulate を直接呼ぶ。
     # Puma と reaper を通した動作は、本番設定の Puma を起動して pg_stat_activity で確かめた（PR に記載）。
-    pool.with_connection(&:verify!)
-    pool.activate
+    expect(DatabaseWarmUp.call(pool: pool, output: StringIO.new)).to be(true)
 
     pool.prepopulate
 
     expect(pool.connections.size).to eq(2)
     expect(pool.connections.map { |connection| backend_pid(connection) }.uniq.size).to eq(2)
+  end
+
+  it 'still lets the reaper open the minimum connections when the database was unreachable at boot' do
+    output = StringIO.new
+    adapter = ActiveRecord::ConnectionAdapters::PostgreSQLAdapter
+    calls = 0
+    allow_any_instance_of(adapter).to receive(:verify!).and_wrap_original do |original, *args|
+      calls += 1
+      raise ActiveRecord::ConnectionNotEstablished, 'database is down' if calls == 1
+
+      original.call(*args)
+    end
+    allow(Rails.error).to receive(:report)
+
+    expect(DatabaseWarmUp.call(pool: pool, output: output)).to be(false)
+    expect(output.string).to include('ActiveRecord::ConnectionNotEstablished: database is down')
+    expect(Rails.error).to have_received(:report).with(instance_of(ActiveRecord::ConnectionNotEstablished),
+                                                       hash_including(handled: true))
+
+    # DB が戻ったあとの reaper の動き（prepopulate と preconnect）を再現する。
+    pool.prepopulate
+    pool.preconnect
+
+    expect(pool.connections.size).to eq(2)
+    pool.with_connection { |connection| expect(connection.select_value('SELECT 1')).to eq(1) }
+  end
+
+  it 'is what Puma runs when each worker boots' do
+    expect(Rails.root.join('config/puma.rb').read).to match(/before_worker_boot do.*DatabaseWarmUp\.call/m)
   end
 
   it 'keeps the minimum connections after thirty idle minutes and closes only the extra ones' do
