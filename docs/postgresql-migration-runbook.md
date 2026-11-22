@@ -32,7 +32,20 @@
 
    パスワードは `~/.pgpass` に置き、URL やコマンド履歴に残さない。
 
-3. リハーサルとして、データを写して確認する（手順 3〜4 と同じ）。確認できたら、切替当日にもう一度写し直す。
+3. アプリ用の最小権限ロール `gatareview_runtime` を作る（MySQL と同じく、アプリは権限を絞ったユーザーでつなぐ）。
+
+   ```bash
+   ADMIN_PG_URL='postgres://avnadmin@<host>:<port>/<db>?sslmode=verify-full&sslrootcert=config/certs/aiven-ca.pem' \
+   RUNTIME_URL_FILE=~/.gatareview-postgres-runtime-url \
+     bin/create-postgres-runtime-role
+   ```
+
+   - 付く権限は、全テーブルの読み書き（SELECT/INSERT/UPDATE/DELETE）と、シーケンスの使用だけ。テーブルの作成・変更・削除、TRUNCATE はできない。
+   - 管理者があとから作るテーブルにも同じ権限が付く。そのため、`db:schema:load` でテーブルを作り直しても権限は残る。
+   - パスワードは手元で作り、サーバーにはハッシュだけを送る。アプリ用の接続先（パスワード入り）は `RUNTIME_URL_FILE` に権限 600 で書かれる。
+   - もう一度流すと、パスワードを新しくして権限をそろえ直す（パスワードの変更にも使える）。
+
+4. リハーサルとして、データを写して確認する（手順 3〜4 と同じ）。確認できたら、切替当日にもう一度写し直す。
 
 ### 2. 書き込みの停止
 
@@ -45,10 +58,11 @@ heroku maintenance:on -a gatareview-back
 ```bash
 MYSQL_DEFAULTS_FILE=<MySQL の接続設定ファイル（ssl-mode=VERIFY_IDENTITY と ssl-ca を含む）> \
 MYSQL_DATABASE=<MySQL の DB 名> \
-PG_URL='postgres://<user>@<host>:<port>/<db>?sslmode=verify-full&sslrootcert=config/certs/aiven-ca.pem' \
+PG_URL='postgres://avnadmin@<host>:<port>/<db>?sslmode=verify-full&sslrootcert=config/certs/aiven-ca.pem' \
   bin/copy-mysql-to-postgres
 ```
 
+- TRUNCATE を使うので、管理者ユーザー（`avnadmin`）で流す。アプリ用ロールではできない。
 - 写す先にデータがあれば止まる。リハーサルのあとに当日写し直すときだけ `ALLOW_TRUNCATE=yes` を付ける（切替後には絶対に流さない）。
 - PostgreSQL 側のテーブルを空にしてから、PostgreSQL 側にある列だけを写す。MySQL にだけ残っている未使用列は写さない。
 - `schema_migrations` は `db:schema:load` が作ったものを使う。
@@ -67,10 +81,11 @@ PG_URL='postgres://<user>@<host>:<port>/<db>?sslmode=verify-full&sslrootcert=con
 
    ```bash
    heroku config:set -a gatareview-back \
-     DATABASE_URL='postgres://<user>:<password>@<host>:<port>/<db>?sslmode=verify-full' \
+     DATABASE_URL="$(cat ~/.gatareview-postgres-runtime-url)" \
      DATABASE_SSL_CA=/app/config/certs/aiven-ca.pem
    ```
 
+   - `DATABASE_URL` はアプリ用ロール `gatareview_runtime` の接続先にする（`avnadmin` にしない）。`bin/create-postgres-runtime-role` が書いたファイルの URL は `sslmode=verify-full` だけを含むので、そのまま使える。
    - Aiven の URI の `sslmode=require` のままでは起動を拒否する（証明書を検証しないため）。
    - APT buildpack（MySQL クライアント用）は不要になる。`Aptfile` を消したので、`heroku buildpacks:remove https://github.com/heroku/heroku-buildpack-apt.git -a gatareview-back` で外してから再デプロイする。
    - `MYSQL_SSL_CA` は使わなくなる。切り戻しの可能性がなくなってから消す。
@@ -109,6 +124,8 @@ MySQL は 2026-12-21 まで残っている（その日に Aiven が停止し、�
 5. `heroku maintenance:off -a gatareview-back` を実行して、動作を確認する。
 
 ## 注意
+
+- 切替後の migration は、`heroku run bin/rails db:migrate` では流せない（アプリ用ロールにテーブルを変える権限がない。MySQL のときと同じ）。メンテナンスモードの間に、手元から `avnadmin` の接続先で `RAILS_ENV=production bin/rails db:migrate` を流す。
 
 - この変更の migration（`20261123000000_use_case_and_accent_insensitive_collation`）は PostgreSQL 専用。MySQL の本番では流さない（手順 1 の `db:schema:load` で適用済みとして記録される）。
 - MySQL 時代の migration（`20261109000000_*`、`20261122000000_*`）は MySQL 専用の SQL を含むので、PostgreSQL で流し直さない。
