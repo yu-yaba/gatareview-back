@@ -17,7 +17,9 @@ RSpec.describe 'Production database connection reuse' do
   before do
     stub_const('ConnectionReuseRecord', record_class)
     record_class.establish_connection(
-      ActiveRecord::Base.connection_db_config.configuration_hash.merge(
+      ActiveRecord::Base.connection_db_config.configuration_hash.except(:pool).merge(
+        max_connections: production_config.fetch('max_connections'),
+        min_connections: production_config.fetch('min_connections'),
         idle_timeout: production_config.fetch('idle_timeout'), reaping_frequency: nil
       )
     )
@@ -25,37 +27,65 @@ RSpec.describe 'Production database connection reuse' do
 
   after { record_class.remove_connection }
 
-  it 'keeps the existing thread-based pool limit and TLS identity verification' do
-    expect(production_config.fetch('pool')).to eq(ENV.fetch('RAILS_MAX_THREADS', '5').to_i)
-    expect(production_config.fetch('sslmode')).to eq('verify-full')
-    expect(pool.min_connections).to eq(0)
+  def backend_pid(connection)
+    connection.select_value('SELECT pg_backend_pid()')
   end
 
-  it 'reuses a connection after ten idle minutes and releases it after thirty minutes' do
+  it 'keeps the thread-based limit, two warm connections and TLS identity verification' do
+    expect(production_config.fetch('max_connections')).to eq(ENV.fetch('RAILS_MAX_THREADS', '5').to_i)
+    expect(production_config.fetch('min_connections')).to eq(ENV.fetch('DB_MIN_CONNECTIONS', '2').to_i)
+    expect(production_config).not_to have_key('pool')
+    expect(production_config.fetch('sslmode')).to eq('verify-full')
+    expect(pool.min_connections).to eq(2)
+  end
+
+  it 'opens up to the minimum connections when the reaper prepopulates a warmed-up pool' do
+    # config/puma.rb の before_worker_boot と同じ手順をたどり、reaper が呼ぶ prepopulate を直接呼ぶ。
+    # Puma と reaper を通した動作は、本番設定の Puma を起動して pg_stat_activity で確かめた（PR に記載）。
+    pool.with_connection(&:verify!)
+    pool.activate
+
+    pool.prepopulate
+
+    expect(pool.connections.size).to eq(2)
+    expect(pool.connections.map { |connection| backend_pid(connection) }.uniq.size).to eq(2)
+  end
+
+  it 'keeps the minimum connections after thirty idle minutes and closes only the extra ones' do
+    connections = Array.new(3) { pool.checkout }
+    pids = connections.map { |connection| backend_pid(connection) }
+    connections.each do |connection|
+      pool.checkin(connection)
+      allow(connection).to receive(:seconds_idle).and_return(1801)
+    end
+
+    pool.flush
+
+    expect(pool.connections.size).to eq(2)
+    pool.with_connection { |reused| expect(pids).to include(backend_pid(reused)) }
+  end
+
+  it 'reuses an idle connection after ten minutes' do
     connection = pool.checkout
-    first_id = connection.select_value('SELECT pg_backend_pid()')
+    first_id = backend_pid(connection)
     pool.checkin(connection)
     allow(connection).to receive(:seconds_idle).and_return(600)
-    pool.flush
-    expect(pool.connections).to include(connection)
-    pool.with_connection { |reused| expect(reused.select_value('SELECT pg_backend_pid()')).to eq(first_id) }
 
-    allow(connection).to receive(:seconds_idle).and_return(1801)
     pool.flush
-    expect(pool.connections).to be_empty
-    pool.with_connection { |fresh| expect(fresh.select_value('SELECT pg_backend_pid()')).not_to eq(first_id) }
+
+    pool.with_connection { |reused| expect(backend_pid(reused)).to eq(first_id) }
   end
 
   it 'recovers when an idle database connection has been closed' do
     first_id = pool.with_connection do |connection|
-      id = connection.select_value('SELECT pg_backend_pid()')
+      id = backend_pid(connection)
       connection.raw_connection.close
       id
     end
     pool.keep_alive(0)
     pool.with_connection do |connection|
       expect(connection.select_value('SELECT 1')).to eq(1)
-      expect(connection.select_value('SELECT pg_backend_pid()')).not_to eq(first_id)
+      expect(backend_pid(connection)).not_to eq(first_id)
     end
   end
 end
