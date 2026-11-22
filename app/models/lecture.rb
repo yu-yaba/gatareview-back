@@ -48,7 +48,7 @@ class Lecture < ApplicationRecord
                        .to_h { |id, average, count| [id, [average, count]] }
 
     records.map do |lecture|
-      average, count = statistics.fetch(lecture.id.to_s, [0, 0])
+      average, count = statistics.fetch(lecture.id, [0, 0])
       {
         id: lecture.id,
         title: lecture.title,
