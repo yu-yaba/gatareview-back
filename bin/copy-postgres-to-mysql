@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# 切り戻し用: PostgreSQL の現在のデータで MySQL のデータを置き換える（bin/copy-mysql-to-postgres の逆）。
+#
+#   ALLOW_OVERWRITE_MYSQL=yes \
+#   MYSQL_DEFAULTS_FILE=<mysql の接続設定ファイル> MYSQL_DATABASE=<DB名> \
+#   PG_URL=<postgres:// で始まる接続先> bin/copy-postgres-to-mysql
+#
+# - PostgreSQL への切替後に MySQL へ戻すときに使う。アプリを止めて（Heroku のメンテナンスモード）から流す。
+# - MySQL の users / lectures / reviews / bookmarks / thanks / site_settings を消して、PostgreSQL の内容を入れる。
+#   削除・更新（thanks_count、reviews_count など）も含めて PostgreSQL と同じになる。
+# - 写すのは PostgreSQL 側にある列だけ。MySQL にだけある未使用列は NULL になる（もともと全行 NULL）。
+#   schema_migrations / ar_internal_metadata は触らない。
+# - 1つのトランザクションで入れ替えるので、途中で失敗すれば MySQL は元のまま残る。
+# - 向きの取り違えを防ぐため、MySQL の users / lectures / reviews の最大 id が PostgreSQL より大きければ止める
+#   （MySQL の方に新しい書き込みがあるということなので、上書きするとそれが消える）。
+# - 写す前に MySQL のダンプを取っておくこと（docs/postgresql-migration-runbook.md の切り戻し手順）。
+set -euo pipefail
+
+: "${MYSQL_DEFAULTS_FILE:?set MYSQL_DEFAULTS_FILE}"
+: "${MYSQL_DATABASE:?set MYSQL_DATABASE}"
+: "${PG_URL:?set PG_URL}"
+
+if [ "${ALLOW_OVERWRITE_MYSQL:-}" != "yes" ]; then
+  echo "This replaces the MySQL data with the PostgreSQL data. Set ALLOW_OVERWRITE_MYSQL=yes to proceed." >&2
+  exit 1
+fi
+
+# 外部キーの順（参照される側が先）。消すときは逆順。
+TABLES=(users lectures reviews bookmarks thanks site_settings)
+
+mysql_query() {
+  mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" --batch --skip-column-names \
+    --default-character-set=utf8mb4 "$MYSQL_DATABASE" -e "$1"
+}
+
+psql_query() {
+  psql "$PG_URL" -v ON_ERROR_STOP=1 -X -q -At -c "$1"
+}
+
+for table in users lectures reviews; do
+  mysql_max=$(mysql_query "SELECT IFNULL(MAX(id), 0) FROM \`${table}\`")
+  pg_max=$(psql_query "SELECT COALESCE(MAX(id), 0) FROM ${table}")
+  if [ "$mysql_max" -gt "$pg_max" ]; then
+    echo "MySQL ${table} has newer ids (max ${mysql_max}) than PostgreSQL (max ${pg_max}). Refusing to overwrite." >&2
+    exit 1
+  fi
+done
+
+# 個人データを含むので、作業ファイルは本人だけが読める場所に作り、終わったら消す。
+umask 077
+sql_file=$(mktemp)
+trap 'rm -f "$sql_file"' EXIT
+
+# PostgreSQL の値を MySQL の SQL リテラルにする式。文字列は '' でエスケープし、
+# MySQL 側は NO_BACKSLASH_ESCAPES にして \ をそのままの文字として扱わせる。
+literal_expression() {
+  local column="$1" data_type="$2"
+  case "$data_type" in
+    boolean)
+      printf "CASE WHEN %s THEN '1' WHEN NOT %s THEN '0' ELSE 'NULL' END" "$column" "$column" ;;
+    timestamp*)
+      printf "COALESCE('''' || to_char(%s, 'YYYY-MM-DD HH24:MI:SS.US') || '''', 'NULL')" "$column" ;;
+    bigint|integer|smallint|"double precision"|real|numeric)
+      printf "COALESCE(%s::text, 'NULL')" "$column" ;;
+    *)
+      printf "COALESCE('''' || replace(%s::text, '''', '''''') || '''', 'NULL')" "$column" ;;
+  esac
+}
+
+{
+  echo "SET NAMES utf8mb4;"
+  echo "SET SESSION sql_mode = CONCAT(@@SESSION.sql_mode, ',NO_BACKSLASH_ESCAPES');"
+  echo "SET FOREIGN_KEY_CHECKS = 0;"
+  echo "START TRANSACTION;"
+  for (( i=${#TABLES[@]}-1; i>=0; i-- )); do
+    echo "DELETE FROM \`${TABLES[$i]}\`;"
+  done
+
+  for table in "${TABLES[@]}"; do
+    columns=()
+    expressions=()
+    while IFS='|' read -r column data_type; do
+      columns+=("\`${column}\`")
+      expressions+=("$(literal_expression "$column" "$data_type")")
+    done < <(psql_query "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${table}' ORDER BY ordinal_position")
+
+    column_list=$(IFS=,; echo "${columns[*]}")
+    separator=" || ',' || "
+    value_list="${expressions[0]}"
+    for expression in "${expressions[@]:1}"; do
+      value_list+="${separator}${expression}"
+    done
+
+    psql_query "SELECT 'INSERT INTO \`${table}\` (${column_list}) VALUES (' || ${value_list} || ');' FROM ${table} ORDER BY id"
+  done
+
+  echo "COMMIT;"
+  echo "SET FOREIGN_KEY_CHECKS = 1;"
+} > "$sql_file"
+
+mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" --default-character-set=utf8mb4 "$MYSQL_DATABASE" < "$sql_file"
+
+for table in "${TABLES[@]}"; do
+  echo "copied ${table}: MySQL $(mysql_query "SELECT COUNT(*) FROM \`${table}\`") rows / PostgreSQL $(psql_query "SELECT COUNT(*) FROM ${table}") rows"
+done

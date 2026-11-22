@@ -21,6 +21,7 @@
 
 ### 1. 事前準備（停止不要）
 
+0. Aiven Console で `avnadmin` のパスワードを変更する（接続情報がほかに漏れていないとはっきりしない場合は必ず）。
 1. Aiven Console で PostgreSQL のサービスを作り、接続情報（ホスト・ポート・ユーザー・パスワード・DB 名）を確認する。CA 証明書が `config/certs/aiven-ca.pem` と同じか確認する（違えばバンドルを更新して先にデプロイする）。
 2. PostgreSQL にスキーマを作る。
 
@@ -87,8 +88,25 @@ PG_URL='postgres://<user>@<host>:<port>/<db>?sslmode=verify-full&sslrootcert=con
 
 ### 切り戻し
 
-- MySQL は 2026-12-21 まで残っている。前のリリースに戻し、`DATABASE_URL` と `MYSQL_SSL_CA` を MySQL のものに戻す。APT buildpack も戻す。
-- 切り替え後に PostgreSQL へ入った書き込みは、手で MySQL に移す。
+MySQL は 2026-12-21 まで残っている（その日に Aiven が停止し、データも消える）。それまでなら次の手順で戻せる。
+
+1. `heroku maintenance:on -a gatareview-back` を実行して、書き込みを止める。
+2. 念のため、MySQL と PostgreSQL の両方のダンプを取り、リポジトリの外に保存する。
+3. 切替後に PostgreSQL へ入った書き込み（レビュー・ブックマーク・ありがとう・新規ユーザー、更新と削除）を MySQL に写し戻す。
+
+   ```bash
+   ALLOW_OVERWRITE_MYSQL=yes \
+   MYSQL_DEFAULTS_FILE=<MySQL の接続設定ファイル（ssl-mode=VERIFY_IDENTITY と ssl-ca を含む）> \
+   MYSQL_DATABASE=<MySQL の DB 名> \
+   PG_URL='postgres://<user>@<host>:<port>/<db>?sslmode=verify-full&sslrootcert=config/certs/aiven-ca.pem' \
+     bin/copy-postgres-to-mysql
+   ```
+
+   - MySQL のアプリ用テーブルを、PostgreSQL の内容で丸ごと置き換える。1つのトランザクションで行うので、途中で失敗すれば MySQL は元のまま残る。
+   - MySQL の `users` / `lectures` / `reviews` に PostgreSQL より新しい id があれば止まる。向きを取り違えて、MySQL にしかない書き込みを消すのを防ぐため。
+   - 終わったら、手順 4 と同じ方法で両方の中身が一致することを確かめる。
+4. `heroku releases:rollback -a gatareview-back` を実行して、切替前のリリースに戻す。コードと設定（`DATABASE_URL`、`MYSQL_SSL_CA` など）がまとめて戻る。戻した先は APT buildpack でビルドしたものなので、そのまま動く。次にビルドするまでに `heroku buildpacks:add --index 1 https://github.com/heroku/heroku-buildpack-apt.git -a gatareview-back` で buildpack も戻す。
+5. `heroku maintenance:off -a gatareview-back` を実行して、動作を確認する。
 
 ## 注意
 
