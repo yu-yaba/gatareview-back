@@ -157,7 +157,7 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
       counter_updates = 0
       connection = ActiveRecord::Base.lease_connection
       allow(connection).to receive(:exec_update).and_wrap_original do |original, *args, **options|
-        if args.first.to_s.match?(/UPDATE `users` SET .*`reviews_count`/)
+        if args.first.to_s.match?(/UPDATE "users" SET .*"reviews_count"/)
           counter_updates += 1
           raise ActiveRecord::Deadlocked, 'Deadlock found when trying to get lock' if counter_updates == 1
         end
@@ -290,7 +290,7 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
 
     def review_order_sql(&)
       sql = []
-      callback = ->(*, payload) { sql << payload[:sql] if payload[:sql].match?(/FROM `reviews`.*ORDER BY/) }
+      callback = ->(*, payload) { sql << payload[:sql] if payload[:sql].match?(/FROM "reviews".*ORDER BY/) }
       ActiveSupport::Notifications.subscribed(callback, 'sql.active_record', &)
       sql
     end
@@ -301,7 +301,7 @@ RSpec.describe 'レビュー・ブックマーク・ありがとうの重複と�
       sql = review_order_sql { get "/api/v1/lectures/#{lecture.id}/reviews" }
 
       expect(response.parsed_body['reviews'].pluck('id')).to eq(reviews.map(&:id))
-      expect(sql).to include(a_string_matching(/ORDER BY `reviews`.`created_at` ASC, `reviews`.`id` ASC/))
+      expect(sql).to include(a_string_matching(/ORDER BY "reviews"."created_at" ASC, "reviews"."id" ASC/))
     end
 
     it '最新レビューは同じ時刻なら id の新しい順に返すこと' do

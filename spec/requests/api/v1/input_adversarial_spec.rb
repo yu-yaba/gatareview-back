@@ -26,9 +26,28 @@ RSpec.describe 'API adversarial input boundaries', type: :request do
           get '/api/v1/lectures', params: { attribute => value }
 
           expect(response).to have_http_status(:bad_request)
-          expect(response.body).not_to include('Mysql2', 'NoMethodError', '/app/')
+          expect(response.body).not_to include('PG::', 'NoMethodError', '/app/')
         end
       end
+    end
+
+    %i[search faculty period_year textbook].each do |attribute|
+      it "rejects a NUL byte in #{attribute} with 400 instead of a database error" do
+        get '/api/v1/lectures', params: { attribute => "a\u0000b" }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.body).not_to include('PG::', 'ArgumentError', 'null byte')
+      end
+    end
+
+    it 'rejects a NUL byte in a JSON body and in a parameter name' do
+      post "/api/v1/lectures/#{lecture.id}/reviews",
+           params: { review: valid_review.merge(content: "#{valid_review[:content]}\u0000") }, as: :json
+      expect(response).to have_http_status(:bad_request)
+
+      get '/api/v1/lectures', params: { "search\u0000" => 'a' }
+      expect(response).to have_http_status(:bad_request)
+      expect(Review.count).to eq(0)
     end
 
     it 'rejects a page offset exceeding the database integer range' do
@@ -95,7 +114,7 @@ RSpec.describe 'API adversarial input boundaries', type: :request do
     end
 
     %w[period_year period_term].each do |attribute|
-      it "rejects an overlong #{attribute} before writing to MySQL" do
+      it "rejects an overlong #{attribute} before writing to the database" do
         post "/api/v1/lectures/#{lecture.id}/reviews",
              params: { review: valid_review.merge(attribute.to_sym => 'x' * 256) }, as: :json
 
@@ -127,7 +146,7 @@ RSpec.describe 'API adversarial input boundaries', type: :request do
            params: '{"review":', headers: { 'CONTENT_TYPE' => 'application/json' }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.body).not_to include('/app/', 'Mysql2', 'backtrace')
+      expect(response.body).not_to include('/app/', 'PG::', 'backtrace')
       expect(Review.count).to eq(0)
     end
 

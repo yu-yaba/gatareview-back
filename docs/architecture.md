@@ -5,7 +5,7 @@ GataReview のバックエンドは、講義、レビュー、ユーザー、ブ
 
 ## 技術スタック
 - Framework: Ruby on Rails 8 API
-- Database: MySQL 8
+- Database: PostgreSQL 18
 - Test: RSpec
 - Auth: Google OAuth token 検証、バックエンド JWT
 - Container: Docker Compose

@@ -66,11 +66,11 @@ API 変更時は request spec を追加する。既存方針では endpoint 追�
 ### DB
 Docker Compose は以下を参照する。
 
-- `MYSQL_DATABASE`
-- `MYSQL_PASSWORD`
-- `MYSQL_USER`
-- `MYSQL_HOST`
-- `MYSQL_ROOT_PASSWORD`
+- `POSTGRES_DB`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_USER`
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`（任意、既定 5432）
 
 ### Google OAuth
 - `GOOGLE_CLIENT_ID`: Google token の `aud` と一致させる。

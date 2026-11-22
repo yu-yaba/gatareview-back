@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# MySQL のデータを、db:schema:load 済みの PostgreSQL にテーブルごとに写す。
+#
+#   MYSQL_DEFAULTS_FILE=<mysql の接続設定ファイル> MYSQL_DATABASE=<DB名> \
+#   PG_URL=<postgres:// で始まる接続先> bin/copy-mysql-to-postgres
+#
+# - 写す列は PostgreSQL 側の列に合わせる（MySQL にだけある未使用列は写さない）。
+# - schema_migrations / ar_internal_metadata は db:schema:load が作った値をそのまま使う。
+# - 写す先のテーブルにデータがあれば止める。切替前のリハーサルなどで上書きしてよいときだけ
+#   ALLOW_TRUNCATE=yes を付ける（本番の切替後に誤って流すと、それまでの書き込みが消える）。
+# - 写したあと主キーの採番を最大値の次に合わせる。
+# - パスワードはコマンドに書かない。MySQL は設定ファイル、PostgreSQL は PG_URL か ~/.pgpass を使う。
+set -euo pipefail
+
+: "${MYSQL_DEFAULTS_FILE:?set MYSQL_DEFAULTS_FILE}"
+: "${MYSQL_DATABASE:?set MYSQL_DATABASE}"
+: "${PG_URL:?set PG_URL}"
+
+# 外部キーの順（参照される側が先）
+TABLES=(users lectures reviews bookmarks thanks site_settings)
+
+mysql_query() {
+  mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" --batch --raw --skip-column-names \
+    --default-character-set=utf8mb4 "$MYSQL_DATABASE" -e "$1"
+}
+
+psql_run() {
+  psql "$PG_URL" -v ON_ERROR_STOP=1 -X -q "$@"
+}
+
+# PostgreSQL の COPY（text 形式）の書式で1列を出す。NULL は \N、\ と改行・復帰・タブはエスケープする。
+read -r -d '' COPY_TEMPLATE <<'SQL' || true
+IFNULL(REPLACE(REPLACE(REPLACE(REPLACE(CAST(`COLUMN` AS CHAR), '\\', '\\\\'), '\n', '\\n'), '\r', '\\r'), '\t', '\\t'), '\\N')
+SQL
+
+copy_expression() {
+  printf '%s' "${COPY_TEMPLATE//COLUMN/$1}"
+}
+
+existing=$(psql_run -At -c "SELECT $(for t in "${TABLES[@]}"; do printf "(SELECT COUNT(*) FROM %s) + " "$t"; done) 0")
+if [ "$existing" != "0" ]; then
+  if [ "${ALLOW_TRUNCATE:-}" != "yes" ]; then
+    echo "The target already has ${existing} rows. Refusing to overwrite it (set ALLOW_TRUNCATE=yes only for a rehearsal)." >&2
+    exit 1
+  fi
+  echo "ALLOW_TRUNCATE=yes: emptying ${existing} existing rows in the target" >&2
+fi
+
+psql_run -c "TRUNCATE $(IFS=,; echo "${TABLES[*]}") RESTART IDENTITY"
+
+for table in "${TABLES[@]}"; do
+  columns=$(psql_run -At -c "SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$table'")
+  expressions=$(IFS=,; for column in $columns; do copy_expression "$column"; printf ','; done)
+  expressions="${expressions%,}"
+
+  mysql_query "SELECT CONCAT_WS('\\t', ${expressions}) FROM \`${table}\` ORDER BY id" |
+    psql_run -c "\\copy ${table} (${columns}) FROM STDIN"
+
+  psql_run -c "SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM ${table}" >/dev/null
+  echo "copied ${table}: $(psql_run -At -c "SELECT COUNT(*) FROM ${table}") rows"
+done

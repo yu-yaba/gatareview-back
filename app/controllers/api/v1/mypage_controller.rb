@@ -102,7 +102,7 @@ module Api
                                  'lectures.lecturer',
                                  'lectures.faculty',
                                  'COUNT(reviews.id) as review_count',
-                                 'ROUND(AVG(reviews.rating), 1) as avg_rating'
+                                 'ROUND(AVG(reviews.rating)::numeric, 1) as avg_rating'
                                )
                                .group('bookmarks.id', 'lectures.id')
                                .order('bookmarks.created_at DESC, bookmarks.id DESC')
@@ -189,7 +189,7 @@ module Api
                                  'lectures.lecturer',
                                  'lectures.faculty',
                                  'COUNT(reviews.id) as review_count',
-                                 'ROUND(AVG(reviews.rating), 1) as avg_rating'
+                                 'ROUND(AVG(reviews.rating)::numeric, 1) as avg_rating'
                                )
                                .group('bookmarks.id', 'lectures.id')
                                .order('bookmarks.created_at DESC, bookmarks.id DESC')

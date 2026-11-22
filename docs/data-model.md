@@ -45,7 +45,7 @@ Google OAuth でログインしたユーザーを表す。
 - 登録前に `title`, `lecturer`, `faculty` の前後空白を除去する。
 
 検索:
-- `search_by_title_and_lecturer` は MySQL の `LIKE` で講義名・教員名を部分一致検索する。
+- `search_by_title_and_lecturer` は `LIKE` で講義名・教員名を部分一致検索する。`lectures.title` / `lecturer` / `faculty` と `users.email` は照合順序 `ci_ai`（ICU `und-u-ks-level1`）で、MySQL 時代の `utf8mb4_0900_ai_ci` と同じく大文字小文字・全角半角・ひらがなカタカナ・濁点の有無を区別しない。一意制約もこの比較で判定する。
 
 JSON 整形:
 - `as_json_reviews` は一覧用に `avg_rating` と `review_count` を付与する。
@@ -75,7 +75,7 @@ JSON 整形:
 
 制約と index:
 - ログインユーザーは `user_id` と `lecture_id` の組み合わせで一意。model の検証に加え、unique index `index_reviews_on_user_id_and_lecture_id` で保証する（追加手順は [review-uniqueness-migration.md](review-uniqueness-migration.md)）。
-- `user_id` が null の匿名レビューは一意制約対象外（MySQL の unique index は NULL を重複扱いしない）。ログインユーザーの同じ内容の再送は `ReviewSubmission` が10分以内なら1件にまとめる（匿名投稿はまとめない）。
+- `user_id` が null の匿名レビューは一意制約対象外（unique index は NULL を重複扱いしない）。ログインユーザーの同じ内容の再送は `ReviewSubmission` が10分以内なら1件にまとめる（匿名投稿はまとめない）。
 - `lecture_id` とレビュー詳細項目の複合 index があり、詳細検索に使う。
 
 注意:

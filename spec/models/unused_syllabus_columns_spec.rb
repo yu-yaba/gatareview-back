@@ -42,8 +42,8 @@ RSpec.describe 'Existing API with unused syllabus columns', type: :model do
 
   after do
     connection = ActiveRecord::Base.connection
-    connection.execute('DROP TEMPORARY TABLE IF EXISTS unused_syllabus_reviews')
-    connection.execute('DROP TEMPORARY TABLE IF EXISTS unused_syllabus_lectures')
+    connection.execute('DROP TABLE IF EXISTS unused_syllabus_reviews')
+    connection.execute('DROP TABLE IF EXISTS unused_syllabus_lectures')
   end
 
   let(:lecture) do

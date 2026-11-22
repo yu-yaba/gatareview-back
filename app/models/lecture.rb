@@ -18,13 +18,13 @@ class Lecture < ApplicationRecord
   validates :title, :lecturer, :faculty, length: { maximum: 255 }
   validates :title, uniqueness: { scope: %i[lecturer faculty] }
 
-  # 検索用スコープ（MySQL対応：LIKEを使用した大文字小文字を区別しない検索）
+  # 検索用スコープ。title / lecturer は照合順序 ci_ai（db/migrate/20261123000000_*）なので、
+  # LIKE でも大文字小文字・全角半角・ひらがなカタカナ・濁点の有無を区別せずに部分一致で探す。
   # 空白だけの検索語は条件なしとして扱う。
   scope :search_by_title_and_lecturer, lambda { |query|
     keyword = normalize_search_keyword(query)
     if keyword.present?
       sanitized_query = "%#{sanitize_sql_like(keyword)}%"
-      # MySQLではLIKEがデフォルトで大文字小文字を区別しないため、ILIKEの代わりにLIKEを使用
       where('lectures.title LIKE :query OR lectures.lecturer LIKE :query', query: sanitized_query)
     end
   }
@@ -33,7 +33,7 @@ class Lecture < ApplicationRecord
   # ゼロ幅スペース（U+200B）・BOM（U+FEFF）だけを除く。
   # 途中の空白はそのまま残す。既存データには「伊藤  守」のように空白が2つ続く担当教員名があり、
   # まとめるとその名前をそのまま貼り付けた検索で見つからなくなるため。
-  # なお照合順序 utf8mb4_0900_ai_ci では全角・半角スペースは同じ文字として比較される。
+  # なお照合順序 ci_ai では全角・半角スペースは同じ文字として比較される。
   def self.normalize_search_keyword(query)
     query.to_s.gsub(/\A[[:space:]\u200B\uFEFF]+|[[:space:]\u200B\uFEFF]+\z/, '')
   end

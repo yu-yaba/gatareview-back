@@ -2,14 +2,14 @@
 
 require 'rails_helper'
 require 'rake'
-require Rails.root.join('db/migrate/20261109000000_add_unique_index_to_reviews_on_user_id_and_lecture_id.rb')
 
-# 本番に一意インデックスを追加する前の状態（重複がありうる DB）を再現する。
-# インデックスの削除・追加は暗黙にコミットされるため、テストのトランザクションを使わずに元へ戻す。
-RSpec.describe AddUniqueIndexToReviewsOnUserIdAndLectureId do
+# 一意インデックスを追加する前の状態（重複がありうる DB）を再現する。
+# migration 自体は MySQL 時代に本番で実行済みで、MySQL 専用の SQL（GROUP_CONCAT）を使うため、
+# PostgreSQL では流さない。ここでは重複が残った DB での編集と、重複を調べる rake タスクを確かめる。
+RSpec.describe 'reviews(user_id, lecture_id) の一意インデックスがない DB' do
   self.use_transactional_tests = false
 
-  let(:index_name) { described_class::INDEX_NAME }
+  let(:index_name) { 'index_reviews_on_user_id_and_lecture_id' }
   let(:connection) { ActiveRecord::Base.lease_connection }
   let(:user) { create(:user) }
   let(:lecture) { create(:lecture) }
@@ -25,44 +25,11 @@ RSpec.describe AddUniqueIndexToReviewsOnUserIdAndLectureId do
     end
   end
 
-  def unique_index?
-    connection.indexes(:reviews).any? { |index| index.name == index_name && index.unique }
-  end
-
   def create_duplicate_reviews
     first = create(:review, user: user, lecture: lecture, content: 'あ' * 30)
     second = build(:review, user: user, lecture: lecture, content: 'い' * 30)
     second.save!(validate: false)
     [first, second]
-  end
-
-  it '重複があれば一覧と確認方法を示して中断し、データを変更しないこと' do
-    duplicates = create_duplicate_reviews
-    before = Review.order(:id).pluck(:id, :user_id, :lecture_id, :content)
-
-    expect { described_class.new.migrate(:up) }.to raise_error(ActiveRecord::MigrationError) do |error|
-      expect(error.message).to include('1 組', 'bin/rails reviews:duplicates', 'docs/review-uniqueness-migration.md',
-                                       "user_id=#{user.id} lecture_id=#{lecture.id} 件数=2 " \
-                                       "review_ids=#{duplicates.map(&:id).join(',')}")
-    end
-
-    expect(Review.order(:id).pluck(:id, :user_id, :lecture_id, :content)).to eq(before)
-    expect(unique_index?).to be(false)
-  end
-
-  it '重複がなければ一意インデックスを追加し、匿名レビューは同じ授業に複数保存できること' do
-    create(:review, user: user, lecture: lecture)
-    2.times { create(:review, user: nil, lecture: lecture) }
-
-    described_class.new.migrate(:up)
-
-    expect(unique_index?).to be(true)
-    expect { build(:review, user: nil, lecture: lecture).save!(validate: false) }.to change(Review, :count).by(1)
-    expect { build(:review, user: user, lecture: lecture).save!(validate: false) }
-      .to raise_error(ActiveRecord::RecordNotUnique)
-
-    described_class.new.migrate(:down)
-    expect(unique_index?).to be(false)
   end
 
   describe '重複が残っている間の本人による編集', type: :request do
