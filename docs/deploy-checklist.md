@@ -28,6 +28,7 @@
 | `AUTH_RATE_LIMIT_PER_MINUTE` | Optional | Google認証APIのIP単位・dyno単位の上限。既定値 `10`。各Pumaワーカーはこれを `WEB_CONCURRENCY` で割った値（切り上げ）で制限する |
 | `API_RATE_LIMIT_PER_FIVE_MINUTES` | Optional | API全体のIP単位・dyno単位の上限。既定値 `300`。割り方は上と同じ |
 | `RATE_LIMIT_FORWARDING_SECRET` | Recommended | フロントのサーバーが付ける利用者IPの署名鍵。32バイト以上のランダム値で、Vercelの同名の変数と完全に同じ値にする。未設定・短い値では署名を無視し、従来どおりルーターが見たIPで制限する |
+| `DB_MIN_CONNECTIONS` | Optional | 各 Puma ワーカーが常に保つ DB 接続の数。既定値 `2`。DB の接続上限（Aiven 無料プランは20、うち3は管理用）に収まるようにする |
 | `WEB_CONCURRENCY` | Optional | Pumaのワーカー数。既定値 `2`。`config/puma.rb` と制限値の割り算の両方がこの値を使う |
 | `FRONTEND_URL` | Recommended | `https://www.gatareview.com` |
 | `ADMIN_EMAILS` | Feature-based | `/admin/review-access` に入るメールアドレス |
@@ -126,6 +127,6 @@ heroku run bin/rails db:migrate -a gatareview-back
 
 ## DB接続の再利用
 
-- 本番の `idle_timeout` は1800秒。接続上限・TLS・実行ユーザーは変更しない。[設定と検証方法](database-connection-reuse.md)を参照する。
+- 本番は各ワーカーに最低2本の接続を保つ（`min_connections`、環境変数 `DB_MIN_CONNECTIONS`）。余分な接続は30分（`idle_timeout: 1800`）で閉じる。接続上限・TLS・実行ユーザーは変更しない。[設定と検証方法](database-connection-reuse.md)を参照する。
 - 反映後は設定値、接続プールの上限、TLS、同じプロセス内での接続再利用と主要APIの応答を確認する。
 - 問題が出た場合は、この変更前のリリースへ戻す。データ形式とスキーマの変更はない。

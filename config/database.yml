@@ -1,7 +1,8 @@
 default: &default
   adapter: postgresql
   encoding: unicode
-  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  # 1プロセス（Puma の各ワーカー）が持つ接続の上限。スレッド数と同じにする。
+  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
   username: <%= ENV["POSTGRES_USER"] %>
   password: <%= ENV["POSTGRES_PASSWORD"] %>
   host: <%= ENV["POSTGRES_HOST"] %>
@@ -23,8 +24,14 @@ test:
 
 production:
   <<: *default
-  # Reuse connections between sparse requests; keep the existing pool limit.
-  # Rails still verifies connections and closes them after 30 idle minutes.
+  # DB（カリフォルニア）までの往復が遠く、新しい接続を作るのに約1.5秒かかる（TLS・認証・設定の SQL が
+  # 約11往復）。アクセスが少ないと接続がすぐ空になり、利用者のリクエストがその1.5秒を待つことになる。
+  # そこで各ワーカーに最低2本の接続を常に用意しておく。足りない分は Rails の定期処理（reaper、
+  # 約20秒ごと）が裏で作り、使われていない接続にも定期的に通信して生かしておく（keepalive、既定600秒）。
+  # 2本を超えて作った接続は、30分使われなければ閉じる。
+  # 本数の目安: 2ワーカー × 2本 = 常時4本。上限は 2ワーカー × RAILS_MAX_THREADS。
+  # Aiven 無料プランの接続上限は20（うち3本は管理用）なので、デプロイで新旧の dyno が重なっても収まる。
+  min_connections: <%= ENV.fetch("DB_MIN_CONNECTIONS") { 2 } %>
   idle_timeout: 1800
   url: <%= ENV['DATABASE_URL'] %>
   # 証明書とホスト名の両方を検証する。DATABASE_URL の sslmode はこの値より優先されるため、
