@@ -19,7 +19,7 @@
 | 変数名 | 必須 | 確認内容 |
 | --- | --- | --- |
 | `JWT_SECRET_KEY` | Yes | 32バイト以上のランダムな専用鍵。未設定・空・短い鍵では起動を拒否する。Rails秘密鍵へのフォールバックはしない |
-| `DATABASE_URL` | Yes | 本番DB（PostgreSQL）の唯一の接続先。`sslmode` を含めないか `sslmode=verify-full` にする。Aiven の URI にある `sslmode=require` のままでは起動を拒否する（証明書を検証しないため）。`?pool=` も付けない（`min_connections` と同時に指定すると Rails が起動を止める） |
+| `DATABASE_URL` | Yes | 本番DB（PostgreSQL）の唯一の接続先。`sslmode` を含めないか `sslmode=verify-full` にする。Aiven の URI にある `sslmode=require` のままでは起動を拒否する（証明書を検証しないため）。`?pool=` は付けない（付けても無視され、接続数は `RAILS_MAX_THREADS` で決まる） |
 | `DATABASE_SSL_CA` | Provider-dependent | 必須。Ruby buildpackで同梱する `config/certs/aiven-ca.pem` の実行時パス `/app/config/certs/aiven-ca.pem` を指定する。未指定・`system`・読めないパスでは起動を拒否する（pg gem 同梱の libpq は OS の CA ストアを読まないため）。旧 `MYSQL_SSL_CA` は使わない |
 | `GOOGLE_CLIENT_ID` | Feature-based | Google ログインの token 検証値 |
 | `GOOGLE_CLIENT_SECRET` | Feature-based | Google OAuth 設定保持 |

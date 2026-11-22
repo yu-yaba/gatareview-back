@@ -72,8 +72,9 @@ RSpec.describe 'Production database connection reuse' do
     pool.prepopulate
     pool.preconnect
 
-    expect(pool.connections.size).to eq(2)
-    pool.with_connection { |connection| expect(connection.select_value('SELECT 1')).to eq(1) }
+    # 接続の数ではなく、実際に DB とつながっている本数を数える。
+    expect(pool.connections.count(&:connected?)).to eq(2)
+    expect(pool.connections.map { |connection| backend_pid(connection) }.uniq.size).to eq(2)
   end
 
   it 'is what Puma runs when each worker boots' do
