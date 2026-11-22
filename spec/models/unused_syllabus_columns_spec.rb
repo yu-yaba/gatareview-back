@@ -15,7 +15,7 @@ RSpec.describe 'Existing API with unused syllabus columns', type: :model do
       table.timestamps
     end
     connection.create_table :unused_syllabus_reviews, temporary: true do |table|
-      table.string :lecture_id
+      table.bigint :lecture_id
       table.bigint :user_id
       table.float :rating
       table.text :content

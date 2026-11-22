@@ -144,7 +144,7 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
         }, headers: headers, as: :json
 
         expect(response).to have_http_status(:created)
-        expect(Review.last).to have_attributes(lecture_id: lecture.id.to_s, period_year: year, period_term: term, user_id: user.id)
+        expect(Review.last).to have_attributes(lecture_id: lecture.id, period_year: year, period_term: term, user_id: user.id)
         expect(response.parsed_body.fetch('review').keys & %w[academic_year term_code lecture_offering_id]).to be_empty
       end
 
@@ -171,7 +171,7 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
       }, headers: headers, as: :json
 
       expect(response).to have_http_status(:created)
-      expect(Review.last).to have_attributes(lecture_id: lecture.id.to_s, user_id: user.id)
+      expect(Review.last).to have_attributes(lecture_id: lecture.id, user_id: user.id)
       expect(response.parsed_body.fetch('review').keys & %w[academic_year term_code lecture_offering_id]).to be_empty
     end
 
@@ -186,7 +186,7 @@ RSpec.describe Api::V1::ReviewsController, type: :request do
       }, headers: headers, as: :json
 
       expect(response).to have_http_status(:ok)
-      expect(review.reload).to have_attributes(lecture_id: lecture.id.to_s, user_id: user.id)
+      expect(review.reload).to have_attributes(lecture_id: lecture.id, user_id: user.id)
       expect(response.parsed_body.fetch('review').keys & %w[academic_year term_code lecture_offering_id]).to be_empty
     end
   end

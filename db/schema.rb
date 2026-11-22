@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_09_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_22_000000) do
   create_table "bookmarks", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "lecture_id"
@@ -36,7 +36,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_09_000000) do
   create_table "reviews", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.float "rating"
     t.text "content"
-    t.string "lecture_id"
+    t.bigint "lecture_id", null: false
     t.string "textbook"
     t.string "attendance"
     t.string "grading_type"
@@ -92,6 +92,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_09_000000) do
 
   add_foreign_key "bookmarks", "lectures"
   add_foreign_key "bookmarks", "users"
+  add_foreign_key "reviews", "lectures"
   add_foreign_key "reviews", "users"
   add_foreign_key "site_settings", "users", column: "last_updated_by_user_id"
   add_foreign_key "thanks", "reviews"
