@@ -29,8 +29,9 @@ production:
   # そこで各ワーカーに最低2本の接続を常に用意しておく。足りない分は Rails の定期処理（reaper、
   # 約20秒ごと）が裏で作り、使われていない接続にも定期的に通信して生かしておく（keepalive、既定600秒）。
   # 2本を超えて作った接続は、30分使われなければ閉じる。
-  # 本数の目安: 2ワーカー × 2本 = 常時4本。上限は 2ワーカー × RAILS_MAX_THREADS。
-  # Aiven 無料プランの接続上限は20（うち3本は管理用）なので、デプロイで新旧の dyno が重なっても収まる。
+  # 本数の目安: 2ワーカー × 2本 = 常時4本。混んだときの上限は 2ワーカー × RAILS_MAX_THREADS = 10本。
+  # Aiven 無料プランで使えるのは17本（20本のうち3本は管理用）。常時分は新旧の dyno が重なっても収まるが、
+  # 混んだ dyno が2つ重なると上限を超えうる（docs/database-connection-reuse.md）。
   min_connections: <%= ENV.fetch("DB_MIN_CONNECTIONS") { 2 } %>
   idle_timeout: 1800
   url: <%= ENV['DATABASE_URL'] %>
