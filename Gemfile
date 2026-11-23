@@ -9,7 +9,7 @@ ruby '3.4.13'
 gem 'rails', '~> 8.1.4', '>= 8.1.4.1'
 
 # Use the Puma web server [https://github.com/puma/puma]
-gem 'puma', '~> 8.0', '>= 8.0.4'
+gem 'puma', '~> 8.1'
 
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 # gem "jbuilder"
@@ -17,7 +17,7 @@ gem 'puma', '~> 8.0', '>= 8.0.4'
 gem 'httparty'
 
 # Error monitoring; enabled only when a production DSN is configured.
-gem 'sentry-rails', '~> 7.2'
+gem 'sentry-rails', '~> 7.3'
 gem 'sentry-ruby', '~> 7.2'
 
 gem 'dotenv-rails', groups: %i[development test]
@@ -59,7 +59,7 @@ gem 'pg', '~> 1.6'
 gem 'rspec-rails'
 
 # Keep CI lint behavior stable during the Rails upgrade.
-gem 'rubocop', '1.92.2', require: false
+gem 'rubocop', '1.92.3', require: false
 
 gem 'factory_bot_rails'
 
